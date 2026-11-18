@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "longevity-gym"
+version = "0.1.0"
+description = "Simulation-first RL environments for judging longevity interventions with multi-omic aging clocks"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+longevity-gym = "longevitygym.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/longevitygym"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
