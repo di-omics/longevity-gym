@@ -27,7 +27,7 @@ def main(argv=None):
     p = sub.add_parser("shortcut", help="can a memorising policy beat the reference? (a few minutes)")
     p.add_argument("--out", default=None, help="also write the table (md and json) into this folder")
     q = sub.add_parser("qc", help="the environment QC card")
-    q.add_argument("--seeds", type=int, default=1000)
+    q.add_argument("--seeds", type=int, default=2000)
     q.add_argument("--out", default=None, help="also write the card (md and json) into this folder")
     p = sub.add_parser("play", help="run one episode with a scripted policy")
     p.add_argument("--seed", type=int, default=0)

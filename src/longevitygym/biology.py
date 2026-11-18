@@ -6,10 +6,10 @@ package's definition they are not aging. That definitional line is the whole gam
 drop because the organs got younger, or because something else that the clock reads has moved.
 
 One mechanism is taken from the study that motivates the repo (README, reference [1]): a
-fibrosis-related protein was the one important feature shared by all six clocks there. Here four
-lung-enriched "shared" proteins are among the strongest age markers in healthy people and also
-rise with fibrosis activity, so every clock trained in healthy people learns to use them, and a
-treatment that lowers fibrosis activity lowers them.
+fibrosis-related protein was the most important feature there and the only important one shared
+by all six clocks. Here four lung-enriched "shared" proteins are the strongest and least noisy
+age markers in healthy people and also rise with fibrosis activity, so every clock trained in
+healthy people leans on them, and a treatment that lowers fibrosis activity lowers them.
 
 Every number below is an assumed default (docs/ASSUMPTIONS.md), not a measurement. The features
 are unnamed simulated numbers, not real proteins or CpG sites.
@@ -40,6 +40,7 @@ class Panel:
     prot_organ: np.ndarray     # organ index for organ-enriched proteins (shared ones included), else -1
     prot_kind: np.ndarray      # KIND_* per protein
     prot_age_w: np.ndarray     # per decade of that organ's age
+    prot_noise_scale: np.ndarray  # multiplies person offsets and measurement noise (0.3 for shared proteins)
     prot_inflam_w: np.ndarray  # per SD of inflammation
     prot_disease_w: np.ndarray  # per unit of fibrosis activity
     cpg_age_w: np.ndarray      # per decade of mean organ age
@@ -61,24 +62,28 @@ def build_panel(seed: int = 7) -> Panel:
     kind = np.concatenate([np.full(n_org, KIND_ORGAN), np.full(N_INFLAM_PROT, KIND_INFLAM),
                            np.full(N_DISEASE_PROT, KIND_DISEASE), np.full(N_NOISE_PROT, KIND_NOISE)])
     lung = np.flatnonzero(organ == ORGANS.index("lung"))
-    shared, other_lung = lung[:N_SHARED_PROT], lung[N_SHARED_PROT:]
+    shared = lung[:N_SHARED_PROT]
     kind[shared] = KIND_SHARED
     age_w = np.zeros(N_PROT)
     age_w[:n_org] = _signed(rng, 0.3, 1.0, n_org)
     age_w[shared] = rng.uniform(1.0, 1.2, N_SHARED_PROT)          # strong age markers, rising with age
+    noise_scale = np.ones(N_PROT)
+    noise_scale[shared] = 0.3                                     # and far less noisy than the rest
     inflam_w = rng.normal(0, 0.03, N_PROT)                        # small background loading everywhere
     inflam_w[kind == KIND_INFLAM] = rng.uniform(0.6, 1.0, N_INFLAM_PROT)
     disease_w = rng.normal(0, 0.02, N_PROT)
     disease_w[kind == KIND_DISEASE] = rng.uniform(0.6, 1.2, N_DISEASE_PROT)
     disease_w[shared] = rng.uniform(0.6, 1.2, N_SHARED_PROT)      # and rising with fibrosis
-    # a fibrotic lung looks older: the other lung proteins move in their own "older" direction too
-    disease_w[other_lung] += np.sign(age_w[other_lung]) * rng.uniform(0.0, 0.3, len(other_lung))
+    # disease looks like aging across the proteome: every other organ-enriched protein also moves a
+    # little in its own "older" direction with fibrosis activity (about one apparent year per unit)
+    others = np.flatnonzero((organ >= 0) & (kind == KIND_ORGAN))
+    disease_w[others] += np.sign(age_w[others]) * rng.uniform(0.0, 0.15, len(others))
     cpg_age = np.zeros(N_CPG)
     cpg_age[:N_AGE_CPG] = _signed(rng, 0.3, 1.0, N_AGE_CPG)
     cpg_mix = np.zeros(N_CPG)
     cpg_mix[N_AGE_CPG:N_AGE_CPG + N_MIX_CPG] = _signed(rng, 0.5, 1.0, N_MIX_CPG)
     cpg_mix[:N_AGE_CPG] += rng.normal(0, 0.1, N_AGE_CPG)
-    return Panel(organ, kind, age_w, inflam_w, disease_w, cpg_age, cpg_mix)
+    return Panel(organ, kind, age_w, noise_scale, inflam_w, disease_w, cpg_age, cpg_mix)
 
 
 PANEL = build_panel()
@@ -134,12 +139,12 @@ def sample_cohort(rng: np.random.Generator, n: int, age_range=(45.0, 80.0), dise
     inflam = inflam + 0.5 * dis
     mix = -0.05 * (chrono - 60) + rng.normal(0, 1.0, n)
     return Cohort(chrono, organ_age, inflam, dis, mix,
-                  rng.normal(0, 0.5, (n, N_PROT)), rng.normal(0, 0.4, (n, N_CPG)))
+                  rng.normal(0, 0.5, (n, N_PROT)) * PANEL.prot_noise_scale, rng.normal(0, 0.4, (n, N_CPG)))
 
 
 def proteome(c: Cohort, rng: np.random.Generator, plate_shift: np.ndarray | None = None) -> np.ndarray:
     p = PANEL
-    x = c.prot_person + rng.normal(0, 0.3, (c.n, N_PROT))
+    x = c.prot_person + rng.normal(0, 0.3, (c.n, N_PROT)) * p.prot_noise_scale
     for k in range(len(ORGANS)):
         cols = np.flatnonzero(p.prot_organ == k)
         x[:, cols] += np.outer((c.organ_age[:, k] - 60) / 10, p.prot_age_w[cols])

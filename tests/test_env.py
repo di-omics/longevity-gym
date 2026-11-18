@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from longevitygym import make
-from longevitygym.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clock_table, clocks
+from longevitygym.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clock_cards, clock_table, clocks
 from longevitygym.biology import KIND_SHARED, PANEL
-from longevitygym.interventions import INTERVENTIONS
+from longevitygym.interventions import INTERVENTIONS, POTENCY_RANGE
 from longevitygym.policies import POLICIES, REFERENCE_DESIGN, clock_effect, run_episode
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -50,6 +50,15 @@ def test_every_proteomic_clock_uses_a_shared_protein_and_reads_fibrosis_as_age()
         assert table[name]["per_unit_fibrosis"] > 0.1, name
     for name in EPIGENETIC:
         assert abs(table[name]["per_unit_fibrosis"]) < 0.05, name
+
+
+def test_whole_panel_clocks_discount_fibrosis_because_a_few_training_people_had_it():
+    from longevitygym.clocks import train_clocks
+    shipped = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table()}
+    healthy = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table(train_clocks(population="none"))}
+    for name in ("prot_dense_chrono", "prot_dense_chrono_b"):
+        assert healthy[name] > 1.7 * shipped[name], name
+        assert shipped[name] < min(shipped[c] for c in PROTEOMIC if "dense" not in c), name
 
 
 def test_mortality_clocks_read_inflammation_and_chronological_ones_do_not():
@@ -92,6 +101,28 @@ def test_deterministic_and_forced_arguments_do_not_shift_the_task():
 def test_truth_is_continuous_not_a_short_list():
     truths = {round(make(seed=s).truth()["true_effect_years"], 6) for s in range(300)}
     assert len(truths) > 120
+    for s in range(50):
+        assert all(POTENCY_RANGE[0] <= q <= POTENCY_RANGE[1] for q in make(seed=s).potency)
+
+
+def test_spec_carries_a_calibration_card_for_every_clock_but_not_its_fibrosis_reading():
+    spec = make(seed=2).reset()
+    table = {r["clock"]: r for r in clock_table()}
+    for name in CLOCK_NAMES:
+        card = spec["clocks"][name]["calibration"]
+        assert card == clock_cards()[name]
+        assert card["years_per_year_of_aging"] == round(table[name]["per_year_organ_aging"], 2)
+        assert not any("fibrosis" in key for key in card)
+    spec["design_defaults"]["clocks"].clear()                       # editing a task must not leak into later envs
+    assert len(make(seed=3).reset()["design_defaults"]["clocks"]) == 8
+
+
+@pytest.mark.parametrize("kw", [{"seed": -1}, {"seed": 1.9}, {"seed": True}, {"dose": 4}, {"dose": 0},
+                                {"cohort": "ipf"}, {"intervention": "aspirin"}, {"potency": (1.0, float("inf"))},
+                                {"potency": 1.0}, {"potency": (0.0, 1.0)}])
+def test_bad_constructor_arguments_rejected(kw):
+    with pytest.raises(ValueError):
+        make(**{"seed": 0, **kw})
 
 
 # ---------------------------------------------------------------- one env object is one episode
@@ -116,6 +147,7 @@ def test_reset_cannot_replay_a_task_and_a_second_design_is_refused():
     {"n_per_arm": 3}, {"n_per_arm": 12.9}, {"n_per_arm": True}, {"weeks": 5}, {"placebo": "false"},
     {"measure_covariates": 1}, {"clocks": ["horvath"]}, {"clocks": []}, {"clocks": ["epi_chrono", "epi_chrono"]},
     {"n_per_arms": 150}, {"plate_layout": "by_site"}, {"effect_years": 0.0, "geroprotective": False}, "design", None,
+    {"clocks": [["epi_chrono"]]}, {"clocks": ["epi_chrono", {}]}, {1: 2, "a": 3}, {"plate_layout": np.array(["by_arm"])},
 ])
 def test_bad_designs_rejected(design):
     env = make(seed=0)
@@ -129,6 +161,7 @@ def test_bad_designs_rejected(design):
     {"effect_years": "0.1", "geroprotective": False}, {"effect_years": 0.0, "geroprotective": "false"},
     {"effect_years": -2.0, "geroprotective": False}, {"effect_years": 0.0, "geroprotective": True},
     {"effect_years": 0.0}, {"effect_years": 0.0, "geroprotective": False, "note": "x"}, {"n_per_arm": 8}, None,
+    {"effect_years": 10 ** 400, "geroprotective": False},
 ])
 def test_bad_reports_rejected_without_ending_the_episode(report):
     env = make(seed=0)
@@ -141,14 +174,25 @@ def test_bad_reports_rejected_without_ending_the_episode(report):
 
 
 def test_designs_are_compared_on_the_same_people_and_noise():
-    def baseline(n):
+    def rows(**design):
         env = make(seed=7)
-        env.reset()
-        obs, *_ = env.step({"n_per_arm": n})
-        return {r["id"]: r for r in obs["rows"]}
-    small, large = baseline(12), baseline(60)
-    for pid, row in small.items():
-        assert row == large[pid]
+        obs, *_ = env.step(design)
+        return {(r["id"], r["timepoint"]): r for r in obs["rows"]}
+    full = rows(n_per_arm=60)
+    assert len(full) == 240
+    for key, row in rows(n_per_arm=12).items():                   # size: both visits
+        assert row == full[key]
+    for key, row in rows(n_per_arm=60, placebo=False).items():    # placebo: the treated arm is untouched
+        assert row == full[key]
+    by_arm, short = rows(n_per_arm=60, plate_layout="by_arm"), rows(n_per_arm=60, weeks=4)
+    same_plate = 0
+    for key, row in full.items():
+        if key[1] == "baseline":                                  # layout and duration: same baseline sample
+            assert row == by_arm[key] == short[key]
+        elif row["plate"] == by_arm[key]["plate"]:                # layout: same follow-up noise on the same plate
+            assert row == by_arm[key]
+            same_plate += 1
+    assert same_plate > 30
 
 
 # ---------------------------------------------------------------- the built-in lessons
@@ -198,7 +242,7 @@ def _tracked_files():
     except (OSError, subprocess.CalledProcessError):
         pass
     files = [ROOT / "README.md", ROOT / "pyproject.toml", ROOT / ".gitignore"]
-    for folder in ("src", "tests", "docs", "results", ".github"):
+    for folder in ("src", "tests", "docs", "results", "tools", ".github"):
         files += [p for p in (ROOT / folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts]
     return files
 

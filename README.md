@@ -4,9 +4,11 @@ A simulated RL environment for one question: did this intervention make simulate
 biologically younger, or did it only move the clocks?
 
 **Status: v0.1, simulation only.** Nothing here is trained on real data. The repo holds no real
-proteomic or methylation data, no published clock, no trial data and no trained agent. The only
-things fitted are eight small ridge regressions on simulated people. Every number is an assumed
-default ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
+proteomic or methylation data, no published clock, no trial data and no stored model or agent.
+Two kinds of things are fitted, both at run time and both on simulated data only: the eight
+small ridge regressions that serve as clocks, and the two small learned policies of the
+shortcut check near the end. Every number is an assumed default
+([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
 [drugdev-gym](https://github.com/di-omics/drugdev-gym): hidden truth, named mistakes, and a QC
 card that says what the reward can and cannot see.
 
@@ -16,9 +18,10 @@ In September 2026 a team from Insilico Medicine and several academic groups publ
 exploratory analysis of a 12-week phase 2a trial of rentosertib in idiopathic pulmonary
 fibrosis [1]. They ran six published proteomic aging clocks on serum from 42 participants and
 compared each treated arm with placebo. Of 54 comparisons (6 clocks x 3 dose regimens x 3
-visits), 21 showed a lower predicted age at a false discovery rate of 0.10, 11 of them at week
-4. The paper states the limit itself: proteomic clocks alone cannot separate an effect on aging
-from the drug's antifibrotic effect, and that cannot be settled inside a fibrosis cohort.
+visits), 21 showed a larger fall in predicted age than placebo (one-sided tests, false
+discovery rate 0.10), 11 of them at week 4. The paper states the limit itself: proteomic clocks
+alone cannot separate an effect on aging from the drug's antifibrotic effect, and that cannot
+be settled inside a fibrosis cohort.
 
 Two details in the paper shaped this simulator:
 
@@ -40,17 +43,21 @@ reads a panel of clocks, and so that the reward can be checked before anyone sca
    omics but, by this definition, are not aging.
 2. **Omics.** 240 simulated protein features and 200 simulated methylation features, with
    plate effects. They are unnamed numbers with assumed loadings, not real proteins or CpG
-   sites. Four lung-enriched proteins are coded to be strong age markers in healthy people and
-   to rise with fibrosis activity as well. They stand in for the shared fibrosis-related
-   feature reported in [1].
+   sites. Four lung-enriched proteins are coded to be the strongest and least noisy age markers
+   in healthy people and to rise with fibrosis activity as well. They stand in for the shared
+   fibrosis-related feature reported in [1]. Fibrosis activity also nudges every other
+   organ-enriched protein in its own "older" direction, so in this toy world the disease looks
+   like aging across the proteome.
 3. **Clocks** ([clocks.py](src/longevitygym/clocks.py)). Eight ridge regressions fitted to
    simulated people. Six imitate the training recipes of the six clocks in [1] as far as a
    small linear model can. Two methylation clocks are this repo's addition; the study in [1]
-   used proteomic clocks only.
+   used proteomic clocks only. Each clock comes with a calibration card: how far its reading
+   moves per year of true organ aging and per unit of two measurable covariates, in healthy
+   people. How a clock reads disease is not on its card.
 4. **Interventions** ([interventions.py](src/longevitygym/interventions.py)). Eight abstract
-   archetypes at three dose levels, each with two hidden potency multipliers, so the true
-   effect is a continuous number. Some are coded to change organ aging. Some only change what
-   leaks into a clock. The agent sees a code name, never the mechanism.
+   archetypes at three dose levels, each with two hidden potency multipliers (0.25 to 1.75), so
+   the true effect is a continuous number. Some are coded to change organ aging. Some only
+   change what leaks into a clock. The agent sees a code name, never the mechanism.
 5. **Environment** ([env.py](src/longevitygym/env.py)). `clock_trial`, two steps: design a
    trial (arm size, placebo, duration, plate layout, covariates, which clocks), receive
    per-sample clock readings, then report the effect in years at 26 weeks. The report also
@@ -58,20 +65,20 @@ reads a panel of clocks, and so that the reward can be checked before anyone sca
    the number. Reward = half for the estimate, half for the call, minus enrolment cost. One env
    object is one episode.
 6. **Environment QC** ([envqc.py](src/longevitygym/envqc.py)). A scripted reference analysis,
-   ten named mistakes that each change one thing, and two constant-answer baselines, all run on
-   the same seeds, people and noise.
+   twelve named mistakes that each change one thing, and two constant-answer baselines, all run
+   on the same seeds, people and noise.
 
 ## The eight simulated clocks
 
 | clock | target | inputs | recipe borrowed from (not the model) | r | MAE (yr) | per year of organ aging | per SD inflammation | per unit fibrosis activity | per SD cell mix |
 |---|---|---|---|---|---|---|---|---|---|
-| prot_sparse_chrono | chronological | 17 proteins selected for their correlation with age | ProtAge [2] | 0.89 | 3.2 | +0.79 | +0.08 | +1.35 | +0.00 |
-| prot_dense_chrono | chronological | the whole panel, weakest fifth of the proteins dropped | conventional chronological model of [3] (OrganAge_chrono in [1]) | 0.90 | 3.1 | +0.81 | +0.04 | +0.24 | +0.00 |
-| prot_sparse_mortality | mortality | 12 proteins selected stepwise from the whole panel | conventional mortality model of [3] (OrganAge_mortality in [1]) | 0.92 | 3.6 | +1.01 | +1.41 | +2.13 | +0.00 |
-| prot_age_mortality | mortality | chronological age plus 11 proteins selected stepwise | PAC [4] | 0.92 | 3.7 | +0.99 | +1.43 | +1.35 | +0.00 |
-| prot_dense_chrono_b | chronological | all 240 proteins | ipfP3GPT [5] | 0.90 | 3.1 | +0.81 | +0.04 | +0.34 | +0.00 |
-| prot_organ_chrono | chronological | 16 proteins drawn from organ-enriched panels | PAOPAC [6] | 0.89 | 3.2 | +0.79 | +0.04 | +1.43 | +0.00 |
-| epi_chrono | chronological | all 200 methylation sites | none (this repo's addition) | 0.90 | 3.0 | +0.78 | +0.00 | +0.00 | -0.67 |
+| prot_sparse_chrono | chronological | 17 proteins selected for their correlation with age | ProtAge [2] | 0.89 | 3.2 | +0.79 | +0.02 | +2.10 | +0.00 |
+| prot_dense_chrono | chronological | the whole panel, weakest fifth of the proteins dropped | conventional chronological model of [3] (OrganAge_chrono in [1]) | 0.90 | 3.1 | +0.81 | +0.03 | +0.71 | +0.00 |
+| prot_sparse_mortality | mortality | 12 proteins selected stepwise from the whole panel | conventional mortality model of [3] (OrganAge_mortality in [1]) | 0.92 | 3.6 | +1.02 | +1.39 | +3.78 | +0.00 |
+| prot_age_mortality | mortality | chronological age plus 11 proteins selected stepwise | PAC [4] | 0.92 | 3.6 | +1.03 | +1.39 | +4.20 | +0.00 |
+| prot_dense_chrono_b | chronological | all 240 proteins | ipfP3GPT [5] | 0.90 | 3.1 | +0.81 | +0.03 | +0.79 | +0.00 |
+| prot_organ_chrono | chronological | 16 proteins drawn from organ-enriched panels | PAOPAC [6] | 0.89 | 3.2 | +0.80 | -0.02 | +2.13 | +0.00 |
+| epi_chrono | chronological | all 200 methylation sites | none (this repo's addition) | 0.90 | 3.0 | +0.78 | +0.00 | +0.00 | -0.66 |
 | epi_mortality | mortality | all 200 methylation sites | none (this repo's addition) | 0.92 | 3.5 | +1.11 | +0.00 | +0.00 | +0.13 |
 
 How to read this table:
@@ -88,28 +95,39 @@ How to read this table:
   followed by a Gompertz model [4] and a neural network [5]. Everything here is linear.
 - **The last four columns are the point of the table.** They give the change in the clock's
   reading, in years, when one hidden quantity is moved in simulated healthy people and
-  everything else is held fixed.
+  everything else is held fixed. The agent is given three of them as the clock's calibration
+  card. The fibrosis column is withheld: in this toy world, as in [1], the clocks were never
+  characterised in patients.
+- "Per SD" means per unit of the simulator's own scale for inflammation and cell mix. One unit
+  is the SD of the person-to-person noise term. Across a whole simulated population the SD is
+  about 1.1 units, so per population SD the readings are about a tenth larger.
 
 What the simulated clocks read:
 
 - All of them follow organ aging, at 0.78 to 1.11 years per year. The
   chronological clocks under-read a real change by about a fifth.
-- The two proteomic mortality clocks read one SD of inflammation as about 1.4 years.
-  The chronological clocks do not (0.08 at most).
-- **All six proteomic clocks read fibrosis activity as age**, from 0.24 to
-  2.13 years per unit, because each of them uses at least one of the four shared
-  proteins. This is built in. The two methylation clocks read none of it, which is also built
-  in: in this simulator blood methylation does not see the lung.
-- The chronological methylation clock reads the blood cell mix (-0.67 years
-  per SD).
+- The two proteomic mortality clocks read one unit of inflammation as about 1.4
+  years. The chronological clocks and both methylation clocks do not (0.03 at
+  most).
+- **All six simulated proteomic clocks read fibrosis activity as age**, from 0.71 to
+  4.20 years per unit. Each uses at least one of the four shared proteins, and
+  fibrosis also nudges the rest of the proteome in the "older" direction. This is built in. The
+  two whole-panel
+  clocks read it least: 4 percent of their simulated training population carried some fibrosis
+  activity, and a whole-panel fit learns to discount part of it. Fitted on healthy people only,
+  the same two clocks read fibrosis about twice as strongly (a test checks this).
+- The two methylation clocks read no fibrosis at all, which is also built in: in this simulator
+  blood methylation does not see fibrosis activity.
+- The chronological methylation clock reads the blood cell mix (-0.66 years
+  per unit).
 
-Refitting the clocks with five other training seeds
-([results/clock_seed_check.md](results/clock_seed_check.md)) keeps the picture: the fibrosis
-column stays at 1.35 to 1.41 and 1.39 to 1.44 for
-the two short-list chronological clocks, 0.20 to 0.36 and
-0.23 to 0.36 for the two whole-panel ones, and
-1.24 to 2.17 and 1.16 to 2.15 for the two
-mortality clocks, whose stepwise step picks either one or two of the shared proteins.
+Refitting the clocks with five other training seeds gives the same picture
+([results/clock_seed_check.md](results/clock_seed_check.md)). The fibrosis column ranges over
+2.10 to 2.18 and 2.09 to 2.15 for the two
+short-list chronological clocks, 0.64 to 0.83 and
+0.62 to 0.82 for the two whole-panel ones, and
+3.80 to 4.05 and 3.97 to 4.21 for the two
+mortality clocks.
 
 Where each recipe departs from its original:
 
@@ -117,10 +135,10 @@ Where each recipe departs from its original:
 |---|---|---|
 | prot_sparse_chrono | ProtAge [2]: gradient-boosted trees on 204 proteins selected from 2,897 | the model class and the selection method |
 | prot_dense_chrono | the conventional chronological model of [3], called OrganAge_chrono in [1]: an elastic net trained on the whole panel | the penalty; here the weakest fifth of the features is dropped |
-| prot_sparse_mortality | the conventional mortality model of [3], called OrganAge_mortality in [1]: a Cox elastic net trained on the whole panel | survival modelling; here a linear fit to a made-up risk score on 12 proteins chosen stepwise |
+| prot_sparse_mortality | the conventional mortality model of [3], called OrganAge_mortality in [1]: a Cox elastic net trained on the whole panel | survival modelling; here a linear fit to a made-up risk score on 12 proteins picked one at a time |
 | prot_age_mortality | PAC [4]: chronological age plus 128 proteins, a Cox step and then a Gompertz model | survival modelling |
-| prot_dense_chrono_b | ipfP3GPT [5]: a neural network on the whole panel with fibrosis-related pathway branches, trained on UK Biobank data | the network and its pathway design; this row is a second whole-panel fit and behaves like prot_dense_chrono |
-| prot_organ_chrono | PAOPAC [6]: organ proxy clocks built from organ-enriched marker panels | the organ proxy structure; here one clock on 16 organ-panel proteins. [1] does not say which PAOPAC model it ran |
+| prot_dense_chrono_b | the clock that [1] calls ipfP3GPT, described in [5] as a pathway-aware proteomic aging clock (in [5] the name ipf-P3GPT belongs to a separate transformer): a neural network on the whole panel with a branch for fibrosis-related pathways, trained on UK Biobank data | the network and its pathway design; this row is a second whole-panel fit and behaves like prot_dense_chrono |
+| prot_organ_chrono | PAOPAC [6]: a family of gradient-boosted clocks, one conventional clock that starts from all plasma proteins and 14 organ proxy clocks built from organ-enriched marker panels | the organ proxy structure; here one clock on 16 organ-panel proteins. [1] does not say which PAOPAC model it ran. If it was the conventional clock, this row imitates the family's organ proxy recipe and not the model that was run |
 
 In [1] the name OrganAge refers to the models of [3]. A different, SomaScan-based package with
 the same name exists (Oh et al., Nature 2023) and is not what [1] used.
@@ -135,30 +153,34 @@ cohort shown; the healthy cohort is in [results/readouts.md](results/readouts.md
 | archetype | TRUTH | prot_sparse_chrono | prot_dense_chrono | prot_sparse_mortality | prot_age_mortality | prot_dense_chrono_b | prot_organ_chrono | epi_chrono | epi_mortality |
 |---|---|---|---|---|---|---|---|---|---|
 | inert | +0.0 | +0.0 | +0.0 | +0.0 | -0.0 | +0.0 | +0.0 | +0.0 | +0.0 |
-| antifibrotic | -0.1 | **-1.1** | -0.3 | **-2.1** | **-1.5** | -0.4 | **-1.1** | -0.1 | -0.1 |
-| anti_inflammatory | +0.0 | -0.1 | -0.0 | **-1.4** | **-1.4** | -0.0 | -0.0 | +0.0 | +0.0 |
+| antifibrotic | -0.1 | **-1.7** | **-0.6** | **-3.3** | **-3.7** | **-0.7** | **-1.7** | -0.1 | -0.1 |
+| anti_inflammatory | +0.0 | -0.0 | -0.0 | **-1.4** | **-1.4** | -0.0 | +0.0 | +0.0 | +0.0 |
 | senolytic_like | -1.4 | -1.1 | -1.1 | **-1.9** | **-2.0** | -1.1 | -1.1 | -1.1 | -1.5 |
-| mtor_like | -1.2 | -0.9 | -0.9 | -1.1 | -1.1 | -0.9 | -0.9 | **-0.6** | -1.3 |
-| reprogramming_like | -0.8 | -0.6 | -0.6 | -0.7 | -0.8 | -0.6 | -0.6 | **-5.3** | **-7.5** |
+| mtor_like | -1.2 | -0.9 | -0.9 | -1.1 | -1.2 | -0.9 | -0.9 | **-0.6** | -1.3 |
+| reprogramming_like | -0.8 | -0.6 | -0.6 | -0.8 | -0.8 | -0.6 | -0.6 | **-5.3** | **-7.5** |
 | immune_mobilizer | +0.0 | +0.0 | +0.0 | +0.0 | -0.0 | +0.0 | +0.0 | **-1.3** | +0.3 |
-| restriction_like | -1.6 | -1.3 | -1.3 | -2.0 | -2.0 | -1.3 | -1.3 | -1.2 | -1.8 |
+| restriction_like | -1.6 | -1.3 | -1.3 | -2.0 | **-2.1** | -1.3 | -1.3 | -1.3 | -1.8 |
 
-- **A compound that treats the disease moves every proteomic clock.** The antifibrotic
-  archetype takes 0.1 years off mean organ age (one organ, the lung). The six
-  proteomic clocks report 0.3 to 2.1 years younger. The two
-  methylation clocks report 0.1 and 0.1 years younger. In the healthy cohort the same archetype has
-  nothing to act on and no clock moves.
-- **Mortality clocks read lower inflammation as younger.** The anti-inflammatory archetype
-  changes no organ. Both proteomic mortality clocks report about 1.4 years younger.
-  The chronological clocks stay near zero.
-- **Methylation clocks can be moved directly.** The reprogramming-like archetype takes
-  0.8 years off organ age and 5.3 to 7.5 years off
-  the two methylation clocks. The proteomic clocks stay near the truth.
-- **A cell-mix shift moves the chronological methylation clock** by 1.3 years with no
-  organ change.
-- The three archetypes coded to make every organ younger (senolytic-like, mTOR-like,
-  restriction-like) move all eight clocks in the same direction. Which archetypes "work" is a
-  coding choice. It is not evidence about senolytics, mTOR inhibitors or dietary restriction.
+- **In this simulator a compound that treats the disease moves every proteomic clock.** The
+  antifibrotic archetype takes 0.1 years off mean organ age (one organ, the
+  lung). The six proteomic clocks report 0.6 to 3.7 years
+  younger. The two methylation clocks report 0.1 and 0.1 years younger. In the healthy cohort the same
+  archetype has nothing to act on and no clock moves.
+- **The two proteomic mortality clocks read lower inflammation as younger.** The
+  anti-inflammatory archetype changes no organ. Both report about 1.4 years
+  younger. The chronological clocks and both methylation clocks stay near zero.
+- **The simulated methylation clocks can be moved directly.** The reprogramming-like archetype
+  takes 0.8 years off organ age and 5.3 to 7.5
+  years off the two methylation clocks. The proteomic clocks stay near the truth.
+- **A cell-mix shift moves the simulated chronological methylation clock** by 1.3
+  years with no organ change.
+- Four archetypes are coded to make every organ younger. At the dose level shown, three of them
+  (senolytic-like, mTOR-like, restriction-like) move all eight clocks in the same direction;
+  the fourth, reprogramming-like, is the one above. This does not hold at every dose: at dose
+  level 3 the mTOR-like archetype also shifts the blood cell mix, and the chronological
+  methylation clock then reads older while the other seven read younger. Which archetypes
+  "work" is a coding choice. It is not evidence about senolytics, mTOR inhibitors, dietary
+  restriction or reprogramming.
 
 These patterns were coded into the simulator or follow from fitting linear clocks to it. The
 table shows what this simulator's clocks read under each coded mechanism. It is not evidence
@@ -166,25 +188,27 @@ about any real clock, drug or trial, and it must not be used to read the result 
 either direction. The antifibrotic archetype is not a model of rentosertib: its small effect on
 organ age is a number chosen for this simulator.
 
-## Environment QC (1000 seeds)
+## Environment QC (2000 seeds)
 
-Seeds 0 to 999; every policy sees the same hidden compound, people and noise.
+Seeds 0 to 1999; every policy sees the same hidden compound, people and noise. In 45 percent of these episodes the true effect is exactly zero and in 39 percent the compound is geroprotective.
 
 | policy | what it changes | mean reward | median error (yr) | right call | gap to reference (SE) | reference wins | verdict |
 |---|---|---|---|---|---|---|---|
-| reference |  | 0.860 | 0.09 | 93% | reference | | 
-| no_placebo | pre/post change in the treated arm only, minus calendar time | 0.593 | 0.48 | 65% | +0.267 (0.011) | 67% | punished
-| plates_by_arm | follow-up samples of each arm run on their own plate | 0.567 | 0.55 | 64% | +0.292 (0.012) | 75% | punished
-| ignore_plate | leave the follow-up plate out of the analysis | 0.825 | 0.12 | 89% | +0.035 (0.005) | 59% | punished
-| short_trial_4wk | stop at 4 weeks and report it as the 26-week effect | 0.648 | 0.19 | 68% | +0.212 (0.009) | 72% | punished
-| small_n_12 | 12 per arm instead of 30 | 0.839 | 0.12 | 89% | +0.021 (0.005) | 43% | punished
-| proteomics_only | one modality: the six proteomic clocks agree, so trust them | 0.816 | 0.15 | 90% | +0.043 (0.007) | 64% | punished
-| epigenetics_only | one modality: the two methylation clocks only | 0.750 | 0.15 | 84% | +0.110 (0.009) | 64% | punished
-| one_clock | one clock: the whole-panel chronological proteomic clock only | 0.860 | 0.12 | 94% | -0.001 (0.005) | 63% | blind
-| cherry_pick_best_clock | report whichever clock shows the biggest reversal | 0.468 | 0.76 | 59% | +0.391 (0.014) | 84% | punished
-| average_all_clocks | average all eight clocks instead of checking that modalities agree | 0.764 | 0.18 | 86% | +0.095 (0.009) | 66% | punished
-| always_no | baseline: 8 people, ignore the data, always answer no effect | 0.602 | 0.23 | 57% | +0.257 (0.012) | 51% | punished
-| always_yes | baseline: 8 people, ignore the data, always answer 1.2 years younger | 0.402 | 1.09 | 43% | +0.458 (0.014) | 80% | punished
+| reference |  | 0.907 | 0.03 | 96% | reference | | 
+| no_placebo | pre/post change in the treated arm only, minus calendar time | 0.611 | 0.47 | 69% | +0.296 (0.008) | 65% | punished
+| plates_by_arm | follow-up samples of each arm run on their own plate | 0.581 | 0.51 | 68% | +0.326 (0.008) | 80% | punished
+| ignore_plate | leave the follow-up plate out of the analysis | 0.866 | 0.05 | 92% | +0.042 (0.003) | 59% | punished
+| short_trial_4wk | stop at 4 weeks and report it as the 26-week effect | 0.704 | 0.15 | 75% | +0.203 (0.007) | 70% | punished
+| small_n_12 | 12 per arm instead of 30 | 0.885 | 0.06 | 93% | +0.022 (0.003) | 33% | punished
+| no_covariates | do not measure cell mix and inflammation, so known leaks stay in | 0.894 | 0.03 | 94% | +0.013 (0.003) | 50% | punished
+| raw_clock_changes | ignore the calibration cards: read raw clock changes as years of aging | 0.873 | 0.06 | 94% | +0.034 (0.003) | 62% | punished
+| proteomics_only | one modality: the six proteomic clocks agree, so trust them | 0.842 | 0.07 | 89% | +0.066 (0.005) | 59% | punished
+| epigenetics_only | one modality: the two methylation clocks only | 0.838 | 0.06 | 93% | +0.069 (0.005) | 58% | punished
+| one_clock | one clock: the whole-panel chronological proteomic clock only | 0.874 | 0.05 | 92% | +0.034 (0.004) | 55% | punished
+| cherry_pick_best_clock | report whichever clock shows the biggest reversal | 0.667 | 0.31 | 78% | +0.240 (0.007) | 80% | punished
+| average_all_clocks | average all eight clocks instead of checking that modalities agree | 0.810 | 0.06 | 87% | +0.097 (0.006) | 58% | punished
+| always_no | baseline: 8 people, ignore the data, always answer no effect | 0.631 | 0.19 | 61% | +0.276 (0.009) | 46% | punished
+| always_yes | baseline: 8 people, ignore the data, always answer 1.2 years younger | 0.372 | 1.12 | 39% | +0.536 (0.009) | 88% | punished
 
 Verdicts: punished = the policy scores lower than the reference by at least 3 standard errors of the paired gap; inverted = higher by at least 3; blind = neither, the reward cannot tell them apart on these seeds. 'Reference wins' is the share of paired seeds, ties counted as half.
 
@@ -192,19 +216,21 @@ Verdicts: punished = the policy scores lower than the reference by at least 3 st
 
 | policy | anti_inflammatory | antifibrotic | immune_mobilizer | inert | mtor_like | reprogramming_like | restriction_like | senolytic_like |
 |---|---|---|---|---|---|---|---|---|
-| reference | 0.03 | 0.06 | 0.06 | 0.04 | 0.29 | 0.17 | 0.26 | 0.23 |
-| no_placebo | 0.32 | **0.46** | 0.35 | **0.40** | **0.85** | **0.95** | **0.95** | **0.87** |
-| plates_by_arm | **0.43** | **0.52** | **0.46** | **0.40** | **0.88** | **1.02** | **1.10** | **1.01** |
-| ignore_plate | 0.06 | 0.11 | 0.09 | 0.05 | 0.33 | 0.22 | 0.32 | 0.28 |
-| short_trial_4wk | 0.03 | 0.07 | 0.06 | 0.04 | **0.70** | 0.43 | **1.11** | **0.97** |
-| small_n_12 | 0.05 | 0.10 | 0.08 | 0.06 | 0.35 | 0.24 | 0.30 | 0.28 |
-| proteomics_only | 0.16 | **0.49** | 0.12 | 0.14 | 0.18 | 0.17 | 0.25 | 0.21 |
-| epigenetics_only | 0.10 | 0.10 | **0.50** | 0.11 | 0.26 | **4.98** | 0.13 | 0.14 |
-| one_clock | 0.11 | 0.14 | 0.09 | 0.09 | 0.15 | 0.15 | 0.27 | 0.24 |
-| cherry_pick_best_clock | **1.43** | **1.07** | **1.23** | **0.35** | 0.35 | **5.97** | **0.56** | **0.71** |
-| average_all_clocks | **0.35** | **0.38** | 0.16 | 0.13 | 0.17 | **1.17** | 0.15 | 0.15 |
-| always_no | 0.00 | 0.08 | 0.00 | 0.00 | **0.86** | **0.72** | **1.48** | **1.35** |
-| always_yes | **1.20** | **1.12** | **1.20** | **1.20** | 0.42 | **0.51** | **0.57** | 0.52 |
+| reference | 0.00 | 0.06 | 0.00 | 0.00 | 0.14 | 0.14 | 0.15 | 0.14 |
+| no_placebo | **0.34** | **0.57** | **0.40** | **0.41** | **0.81** | **1.03** | **0.96** | **0.88** |
+| plates_by_arm | **0.49** | **0.56** | **0.44** | **0.45** | **0.86** | **1.21** | **1.08** | **1.07** |
+| ignore_plate | 0.03 | 0.10 | 0.03 | 0.03 | 0.20 | 0.23 | 0.22 | 0.22 |
+| short_trial_4wk | 0.00 | 0.07 | 0.00 | 0.00 | **0.62** | 0.38 | **1.10** | **0.95** |
+| small_n_12 | 0.02 | 0.08 | 0.03 | 0.02 | 0.21 | 0.23 | 0.23 | 0.22 |
+| no_covariates | 0.01 | 0.06 | 0.03 | 0.00 | 0.28 | 0.14 | 0.13 | 0.12 |
+| raw_clock_changes | 0.00 | 0.06 | 0.02 | 0.00 | 0.31 | 0.17 | 0.27 | 0.24 |
+| proteomics_only | 0.06 | **0.87** | 0.06 | 0.06 | 0.14 | 0.14 | 0.15 | 0.15 |
+| epigenetics_only | 0.04 | 0.09 | 0.04 | 0.03 | 0.13 | **5.29** | 0.14 | 0.13 |
+| one_clock | 0.05 | 0.30 | 0.04 | 0.04 | 0.12 | 0.12 | 0.13 | 0.13 |
+| cherry_pick_best_clock | 0.28 | **1.39** | 0.25 | 0.26 | 0.27 | **5.35** | 0.30 | 0.30 |
+| average_all_clocks | 0.03 | **0.60** | 0.04 | 0.03 | 0.12 | **1.33** | 0.13 | 0.13 |
+| always_no | 0.00 | 0.07 | 0.00 | 0.00 | **0.87** | **0.72** | **1.44** | **1.33** |
+| always_yes | **1.20** | **1.13** | **1.20** | **1.20** | **0.47** | **0.57** | **0.67** | **0.62** |
 
 Bold = at least 0.3 years worse than the reference on that archetype.
 
@@ -212,104 +238,103 @@ Bold = at least 0.3 years worse than the reference on that archetype.
 
 | people per arm | mean reward | right call | median error (yr) | gap to reference (SE) |
 |---|---|---|---|---|
-| 12 | 0.839 | 89% | 0.12 | +0.021 (0.005) |
-| 20 | 0.854 | 92% | 0.11 | +0.005 (0.004) |
-| 30 | 0.860 | 93% | 0.09 | +0.000 (0.000) |
-| 60 | 0.846 | 94% | 0.08 | +0.014 (0.003) |
-| 100 | 0.817 | 94% | 0.07 | +0.043 (0.004) |
-| 150 | 0.782 | 95% | 0.06 | +0.077 (0.004) |
+| 12 | 0.885 | 93% | 0.06 | +0.022 (0.003) |
+| 20 | 0.901 | 94% | 0.03 | +0.007 (0.003) |
+| 30 | 0.907 | 96% | 0.03 | +0.000 (0.000) |
+| 60 | 0.902 | 97% | 0.02 | +0.006 (0.002) |
+| 100 | 0.877 | 98% | 0.01 | +0.031 (0.003) |
+| 150 | 0.841 | 98% | 0.01 | +0.067 (0.003) |
 
 ### Where the reference itself gets the call wrong (cells under 90 percent)
 
 | archetype | dose level | episodes | right call |
 |---|---|---|---|
-| mtor_like | 1 | 45 | 78% |
-| mtor_like | 2 | 49 | 86% |
-| mtor_like | 3 | 33 | 45% |
-| reprogramming_like | 1 | 40 | 80% |
-| reprogramming_like | 2 | 33 | 79% |
-| reprogramming_like | 3 | 40 | 85% |
-| restriction_like | 1 | 48 | 81% |
-| senolytic_like | 1 | 40 | 80% |
+| mtor_like | 1 | 84 | 86% |
+| mtor_like | 3 | 75 | 84% |
+| reprogramming_like | 1 | 83 | 83% |
+| reprogramming_like | 2 | 85 | 86% |
 
-Wrong calls by the reference: 74 of 1000. Missed real effects: 70. False alarms: 4. True effect within 0.3 years of the threshold: 61.
+Wrong calls by the reference: 88 of 2000. Missed real effects: 62. False alarms: 26. True effect within 0.3 years of the threshold: 82.
 
 What the card says:
 
-- The reference analysis lands within 0.09 years on the median and makes the
-  right call 93 percent of the time on these seeds. It is a first draft and
-  a floor, not an optimum.
-- The costliest choices are reporting the best-looking clock (0.39
-  reward lost), running each arm's follow-up samples on its own plate (0.29),
-  having no placebo arm (0.27) and stopping at 4 weeks
-  (0.21).
-- **Trusting the six proteomic clocks because they agree** loses 0.04
-  overall and is wrong exactly where it matters. On the antifibrotic archetype its error is
-  0.49 years against 0.06 for the
-  reference. The six agree there because they share inputs and a training population, not
-  because six independent witnesses saw aging slow.
-- Methylation alone is worse (0.11 lost): it over-reads the
-  reprogramming-like archetype by 4.98 years. Averaging
-  all eight clocks is still off by 1.17 years there.
-- Punished, but only mildly: leaving the plate out of the analysis (gap +0.035, SE 0.005);
-  enrolling 12 per arm instead of 30 (gap +0.021, SE 0.005).
-- **Blind spots, reported and not hidden.** The reward cannot tell the reference from using the
-  whole-panel chronological proteomic clock alone (gap -0.001, SE 0.005). In this simulator that
-  clock is the one least sensitive to everything that is not aging, so using it alone costs
-  nothing. A harder version needs a mechanism that fools it.
-- The reference has one weak cell: the mTOR-like archetype at dose level 3, where it makes the
-  right call 45 percent of the time (33 episodes). A cell-mix shift pushes the chronological
-  methylation clock the other way there, the methylation median shrinks toward zero, and the
-  conservative rule reports too little. The covariates would reveal the shift, and the reference
-  does not use them.
-- The reference errs on the side of missing real effects: 70 of its 74 wrong calls are real
-  effects called not geroprotective, and in 61 of the 74 the true effect is within 0.3 years of
-  the half-year threshold. The clocks under-read real change by about a fifth and the rule is
-  conservative on top of that.
+- The reference analysis lands within 0.03 years on the median and makes the
+  right call 96 percent of the time on these seeds. It is a first draft and
+  a floor, not an optimum. Treat the second decimal of every figure on this card as noise: on
+  another block of seeds the smallest gaps can change verdict.
+- The costliest choices are running each arm's follow-up samples on its own plate (0.33 reward
+  lost), having no placebo arm (0.30), reporting the best-looking clock (0.24) and stopping at 4
+  weeks (0.20).
+- **Trusting the six proteomic clocks because they agree** loses 0.07
+  overall, and in this simulator it is wrong where it matters. On the antifibrotic archetype
+  its error is 0.87 years against
+  0.06 for the reference. The six simulated clocks agree there because
+  they were built to share inputs and a training population. That is a property of this toy
+  world. It is not a finding about the six real clocks or about the trial in [1].
+- Methylation alone loses 0.07: it over-reads the reprogramming-like
+  archetype by 5.29 years. Averaging all eight clocks is
+  still off by 1.33 years there.
+- **One clock is not enough either.** Using the whole-panel chronological proteomic clock alone,
+  with its calibration card, loses 0.03 (SE 0.004). It is the proteomic clock that reads
+  fibrosis least, and it is still fooled on the antifibrotic archetype: its error there is 0.30
+  years against 0.06 for the reference.
+- Also punished, by less: leaving the plate out of the analysis (gap +0.042, SE 0.003);
+  enrolling 12 per arm instead of 30 (gap +0.022, SE 0.003); not measuring the two covariates
+  (gap +0.013, SE 0.003); ignoring the calibration cards (gap +0.034, SE 0.003).
+
+- No cell of the reference is under 70 percent right calls on these seeds. The table above lists
+  the cells under 90 percent.
+- Of the reference's 88 wrong calls, 62 are real effects called not geroprotective and 26 are
+  false alarms. In 82 of the 88 the true effect is within 0.3 years of the half-year threshold.
 - The reward has a high floor. Answering "no effect" without looking scores
-  0.60, because by design about half of the hidden compounds do nothing. Read
-  every reward above against that floor.
-- The cost term is steep. Under the reference analysis the reward peaks near 30 people per arm,
-  and 150 per arm (0.78) scores lower than 12 per arm (0.84) although
-  it makes the right call more often (95 against 89 percent).
-  That is a property of one assumed cost constant, not a statement about trial economics.
+  0.63, because 45 percent of the hidden compounds do nothing.
+  Read every reward above against that floor.
+- The cost term is steep. Under the reference analysis the reward is highest at
+  30 people per arm on this grid, and 150 per arm (0.84) scores
+  lower than 12 per arm (0.89) although it makes the right call more often
+  (98 against 93 percent). That is a property of one assumed cost
+  constant, not a statement about trial economics.
 
 ## Can a policy that memorises beat the reference?
 
-Trained on seeds 20000 to 22399. Each cell: mean reward, then the paired difference to the reference on the same seeds (standard error). Positive = beats the reference.
+Trained on seeds 20000 to 22399. Each cell: mean reward, then the paired difference to the reference on the same seeds (standard error). Positive = beats the reference. In the last column the hidden aging potency is forced to 2.5, outside the range of 0.25 to 1.75 that the policies were trained on.
 
-| policy | trial design | seeds 0 to 399 | seeds 1000 to 1399 |
-|---|---|---|---|
-| reference | reference design | 0.871 | 0.860 |
-| memoriser | same design as the reference | 0.855, -0.016 (0.010) | 0.859, -0.001 (0.012) |
-| classify_regress | same design as the reference | 0.889, +0.018 (0.009) | 0.888, +0.028 (0.011) |
-| memoriser | 12 per arm | 0.839, -0.032 (0.012) | 0.849, -0.011 (0.014) |
-| classify_regress | 12 per arm | 0.862, -0.010 (0.012) | 0.861, +0.001 (0.013) |
-| memoriser | no placebo arm | 0.795, -0.077 (0.014) | 0.769, -0.091 (0.017) |
-| classify_regress | no placebo arm | 0.794, -0.077 (0.014) | 0.771, -0.089 (0.017) |
-| memoriser | stop at 4 weeks | 0.819, -0.053 (0.012) | 0.799, -0.061 (0.016) |
-| classify_regress | stop at 4 weeks | 0.826, -0.045 (0.011) | 0.805, -0.055 (0.016) |
-| memoriser | plates by arm | 0.724, -0.148 (0.017) | 0.732, -0.129 (0.018) |
-| classify_regress | plates by arm | 0.727, -0.144 (0.017) | 0.731, -0.129 (0.018) |
+| policy | trial design | seeds 0 to 399 | seeds 1000 to 1399 | seeds 1000 to 1399, aging potency 2.5 |
+|---|---|---|---|---|
+| reference | reference design | 0.905 | 0.908 | 0.911 |
+| memoriser | same design as the reference | 0.824, -0.081 (0.011) | 0.846, -0.062 (0.011) | 0.751, -0.160 (0.011) |
+| classify_regress | same design as the reference | 0.896, -0.009 (0.008) | 0.908, -0.000 (0.008) | 0.914, +0.003 (0.005) |
+| memoriser | 12 per arm | 0.824, -0.081 (0.012) | 0.857, -0.051 (0.011) | 0.764, -0.147 (0.011) |
+| classify_regress | 12 per arm | 0.878, -0.027 (0.010) | 0.900, -0.009 (0.010) | 0.898, -0.013 (0.006) |
+| memoriser | no placebo arm | 0.726, -0.179 (0.016) | 0.736, -0.172 (0.017) | 0.685, -0.226 (0.015) |
+| classify_regress | no placebo arm | 0.731, -0.174 (0.016) | 0.740, -0.168 (0.017) | 0.697, -0.214 (0.015) |
+| memoriser | stop at 4 weeks | 0.792, -0.113 (0.012) | 0.812, -0.096 (0.013) | 0.733, -0.178 (0.012) |
+| classify_regress | stop at 4 weeks | 0.837, -0.068 (0.011) | 0.855, -0.054 (0.011) | 0.837, -0.074 (0.008) |
+| memoriser | plates by arm | 0.661, -0.244 (0.018) | 0.706, -0.202 (0.017) | 0.654, -0.257 (0.015) |
+| classify_regress | plates by arm | 0.673, -0.232 (0.018) | 0.707, -0.201 (0.017) | 0.660, -0.251 (0.015) |
 
-Two learned policies, trained on 2,400 episodes with only what an agent legitimately gets
-([shortcut.py](src/longevitygym/shortcut.py)):
+Two learned policies, refitted on every run from 2,400 episodes with only what an agent
+legitimately gets ([shortcut.py](src/longevitygym/shortcut.py)):
 
-- **Pure memorising does not win.** Recognising the archetype and answering with a memorised
-  effect scores 0.855 and
-  0.859 on two blocks of seeds, against
-  0.871 and 0.860
-  for the reference. The hidden potency is what prevents it.
-- **Learning does help, which is the point.** Recognising the archetype and then estimating
-  inside it beats the reference by 0.018
-  and 0.028.
-- **The design lessons still hold for the learner.** Take away the placebo arm, stop at 4
-  weeks or put each arm on its own plate, and the same learner falls below the reference
-  (-0.077, -0.045
-  and -0.144 on the first block).
+- **Pure memorising.** Recognising the archetype and answering with a memorised effect scores
+  0.824 and 0.846 on two blocks of new seeds, against 0.905 and 0.908 for the reference. Pooled
+  over the two blocks the difference is -0.071 (SE 0.007): memorising loses.
+- **Learning inside the task mix.** Recognising the archetype and then estimating inside it
+  scores 0.896 and 0.908. Pooled difference to the reference: -0.005 (SE 0.006): a tie within
+  the noise.
+- **Outside the potency range they were trained on** (aging potency forced to 2.5) the memoriser
+  scores 0.751 and the learner 0.914, against 0.911 for the reference (differences -0.160, SE
+  0.011, and +0.003, SE 0.005). The memoriser falls behind the reference; the learner stays
+  level with the reference. A policy that reads the clocks should not care about the range, so
+  this column is the one to watch when a stronger learner is trained here.
+- **The design lessons still cost the learner.** Against its own full design, taking away the
+  placebo arm costs it 0.165, stopping at 4 weeks 0.059 and putting each arm on its own plate
+  0.222 on the first block (0.168, 0.054 and 0.201 on the second). Enrolling 12 per arm instead
+  of 30 changes its score by -0.018 and -0.009.
 
-Seeds are public. Treat seeds 0 to 999 as a development set and score a trained agent on seeds
-drawn at evaluation time.
+Seeds are public, and the task text alone (compound code, dose level, cohort) is enough to
+identify most development seeds. Treat seeds 0 to 1999 as a development set, and
+score a trained agent on seeds drawn at evaluation time from a range too large to enumerate.
 
 ## Run it
 
@@ -323,8 +348,8 @@ longevity-gym play --seed 3               # one episode with the scripted refere
 longevity-gym clocks                      # the clock table (add --out results to save it)
 longevity-gym seedcheck                   # the same after refitting with other seeds
 longevity-gym readouts                    # clocks vs truth
-longevity-gym qc --out results            # the QC card, about 5 minutes
-longevity-gym shortcut --out results      # the memorising check, about 5 minutes
+longevity-gym qc --out results            # the QC card, several minutes
+longevity-gym shortcut --out results      # the memorising check, several minutes
 python tools/build_readme.py              # rebuild this README from results/
 ```
 
@@ -339,7 +364,9 @@ _, reward, done, info = env.step({"effect_years": -0.3, "geroprotective": False}
 Truth lives in the env object and is returned after the report. A harness for a real agent
 must keep the agent on the JSON side and give it a new env for every episode. Numbers here
 were generated with Python 3.12 and numpy 2 on macOS arm64; other builds can differ in the
-last digit.
+last digit. If a run is much slower than stated (numpy built on OpenBLAS, for example numpy
+1.26 from pip), set OPENBLAS_NUM_THREADS=1. After any change under src/, regenerate results/
+and rebuild this README; a test fails if the README no longer matches results/.
 
 ## Limits
 
@@ -349,11 +376,14 @@ last digit.
   estimates for any real drug, diet or procedure, and nothing here says any intervention works.
 - The clocks are linear fits to simulated features. They imitate training recipes, not models.
   No published weight, protein list or dataset is used.
-- The reference analysis leans on one assumption: that blood methylation does not see lung
-  fibrosis at all. If it did, checking one modality against the other would protect less.
+- The reference analysis leans on one assumption: that blood methylation does not see fibrosis
+  activity at all. If it did, checking one modality against the other would protect less.
   Nothing here tests that assumption, and [1] had no second modality to check against.
-- The reference analysis and the list of mistakes are a first draft. No one outside has
-  reviewed them, and a learned policy already beats the reference.
+- A score on this version does not separate reading the clocks from knowing this simulator's
+  task mix (eight archetypes, one potency range). The off-range column of the shortcut table
+  is a first step; a held-out archetype is needed as well.
+- The reference analysis and the list of mistakes are a first draft, and no one outside has
+  reviewed them.
 - One environment, one disease cohort, two modalities. Next: transcriptomic and blood
   chemistry clocks, a layer that replays real public clock readouts, and an LLM-agent harness.
 - No licence has been chosen yet, so for now all rights are reserved.

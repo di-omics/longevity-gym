@@ -18,12 +18,21 @@ eight here are linear.
     prot_sparse_mortality  recipe from the conventional mortality model of [3]
                            (OrganAge_mortality in [1]): mortality, sparse fit from the whole panel
     prot_age_mortality     recipe from PAC [4]: mortality, chronological age plus selected proteins
-    prot_dense_chrono_b    recipe from ipfP3GPT [5]: chronological age, every protein kept. The
-                           original is a neural network with fibrosis-related pathway branches.
-                           That design is not modelled, so this is a second whole-panel fit on
-                           a different subsample and behaves much like prot_dense_chrono.
-    prot_organ_chrono      recipe from PAOPAC [6]: chronological age, proteins drawn from
-                           organ-enriched panels
+    prot_dense_chrono_b    recipe from the clock that [1] calls ipfP3GPT, described in [5] as a
+                           pathway-aware proteomic aging clock (in [5] the name ipf-P3GPT
+                           belongs to a separate transformer): chronological age, every protein
+                           kept. The original is a neural network with a branch for
+                           fibrosis-related pathways, trained on UK Biobank data. That design
+                           is not modelled, so this is a second whole-panel fit on a different
+                           subsample and behaves much like prot_dense_chrono.
+    prot_organ_chrono      recipe from PAOPAC [6], a family of one conventional clock and 14
+                           organ proxy clocks: chronological age, proteins drawn from
+                           organ-enriched panels. [1] does not say which PAOPAC model it ran;
+                           if it was the conventional one, this imitates the family's organ
+                           proxy recipe and not the model that was run.
+
+Every clock also has a calibration card (clock_cards): what an analyst is told about it. The
+card is measured in simulated healthy people and says nothing about fibrosis.
 
 Two methylation clocks (chronological and mortality) are this repo's addition. The study in [1]
 used proteomic clocks only.
@@ -136,14 +145,17 @@ def _select(kind, k, x, y, uses_age, age):
             cols = np.flatnonzero(PANEL.prot_organ == organ)
             chosen += list(cols[np.argsort(corr[cols])[-2:]])
         rest = [j for j in np.flatnonzero(PANEL.organ_protein_mask) if j not in chosen]
-        rest = sorted(rest, key=lambda j: corr[j])[-(k - len(chosen)):]
+        rest = sorted(rest, key=lambda j: corr[j])
+        rest = rest[len(rest) - (k - len(chosen)):]
         return np.sort(np.array(chosen + rest))
     raise ValueError(kind)
 
 
-def train_clocks(seed: int = TRAIN_SEED) -> dict[str, Clock]:
+def train_clocks(seed: int = TRAIN_SEED, population: str = "general") -> dict[str, Clock]:
+    """population: "general" (mostly healthy, 4 percent with some fibrosis activity; the default)
+    or "none" (healthy people only; used by a test to show what the diseased few change)."""
     rng = np.random.default_rng(seed)
-    pool = sample_cohort(rng, POOL_N, TRAIN_AGES, disease="general")
+    pool = sample_cohort(rng, POOL_N, TRAIN_AGES, disease=population)
     xp, xm = proteome(pool, rng), methylome(pool, rng)
     risk = pool.mortality_age + rng.normal(0, RISK_NOISE_SD, pool.n)
     out = {}
@@ -209,8 +221,28 @@ def clock_table(fitted=None) -> list[dict]:
     return rows
 
 
+@lru_cache(maxsize=1)
+def clock_cards() -> dict:
+    """What an analyst is told about each clock: how far its reading moves per year of true organ
+    aging and per unit of the two measurable covariates, from validation in simulated healthy
+    people. Its reading of fibrosis activity is deliberately not on the card: in this toy world,
+    as in the study behind it, the clocks were never characterised in patients."""
+    return {r["clock"]: {"years_per_year_of_aging": round(r["per_year_organ_aging"], 2),
+                         "years_per_sd_cell_mix": round(r["per_sd_cell_mix"], 2),
+                         "years_per_sd_inflammation": round(r["per_sd_inflammation"], 2)}
+            for r in clock_table()}
+
+
+TABLE_CAPTION = (
+    "All eight rows are ridge regressions on simulated features. None is a real clock. The fourth column names "
+    "the published clock whose training recipe the row imitates; no published model, weight or protein list is "
+    "used. r and MAE are measured on held-out simulated people and are not accuracy figures for any published "
+    "clock. Numbers in square brackets refer to the reference list in README.md.")
+
+
 def clock_table_markdown(fitted=None) -> str:
-    out = ["| clock | target | inputs | recipe borrowed from (not the model) | r | MAE (yr) "
+    out = ["# The eight simulated clocks", "", TABLE_CAPTION, "",
+           "| clock | target | inputs | recipe borrowed from (not the model) | r | MAE (yr) "
            "| per year of organ aging | per SD inflammation | per unit fibrosis activity | per SD cell mix |",
            "|---|---|---|---|---|---|---|---|---|---|"]
     for r in clock_table(fitted):

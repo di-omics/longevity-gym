@@ -1,14 +1,15 @@
-"""Scripted policies: one reference analysis, ten named mistakes that each change one thing, two constants.
+"""Scripted policies: one reference analysis, twelve named mistakes that each change one thing, two constants.
 
 The reference is a first draft and a floor, not an optimum:
-  0. 30 per arm with placebo, 26 weeks, follow-up plates randomized (30 is where this reward
-     peaks under this analysis; see the enrolment curve on the QC card);
+  0. 30 per arm with placebo, 26 weeks, follow-up plates randomized, covariates measured;
   1. placebo-controlled change scores, with the follow-up plate as a term in the model;
-  2. the median effect within each modality (six proteomic clocks, two methylation clocks);
-  3. believe the more conservative modality, and report zero when the two disagree in sign.
-Rule 3 is the whole defence against a clock family that reads something other than aging. It
-does not use the covariates, and it is known to miss a real effect when a cell-mix shift pushes
-one methylation clock the other way (the mTOR-like archetype at its top dose).
+  2. use each clock's calibration card: subtract what the measured shifts in cell mix and
+     inflammation explain, then divide by the clock's slope (years of reading per year of aging);
+  3. take the median within each modality (six proteomic clocks, two methylation clocks);
+  4. believe the more conservative modality, and report zero when the two disagree in sign;
+  5. report exactly zero when the result is under 0.2 years.
+Rule 4 is the only defence against something the cards do not describe, such as a clock family
+that reads disease activity as age.
 """
 from __future__ import annotations
 
@@ -18,20 +19,22 @@ from .clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clocks
 from .interventions import GEROPROTECTIVE_THRESHOLD
 
 REFERENCE_DESIGN = {"n_per_arm": 30, "placebo": True, "weeks": 26, "plate_layout": "randomized",
-                    "measure_covariates": False, "clocks": list(CLOCK_NAMES)}
+                    "measure_covariates": True, "clocks": list(CLOCK_NAMES)}
+ZERO_BAND = 0.2   # years; a smaller estimate is reported as exactly zero
+COVARIATES = {"lymphoid_z": "years_per_sd_cell_mix", "crp_z": "years_per_sd_inflammation"}
 
 
-def _changes(rows, clock):
+def _end_changes(rows, key):
     base = {r["id"]: r for r in rows if r["timepoint"] == "baseline"}
-    return [(r["arm"] == "treated", r[clock] - base[r["id"]][clock], r["plate"])
+    return [(r["arm"] == "treated", r[key] - base[r["id"]][key], r["plate"])
             for r in rows if r["timepoint"] == "end"]
 
 
 def clock_effect(rows, clock, weeks, use_plate=True) -> float:
-    """Treated-minus-placebo change for one clock, in years. The follow-up plate enters the model
-    when it is not confounded with the arm. Without a placebo arm: the mean change in the treated
-    minus the calendar time that passed."""
-    ch = _changes(rows, clock)
+    """Treated-minus-placebo change for one clock, in years of clock reading. The follow-up plate
+    enters the model when it is not confounded with the arm. Without a placebo arm: the mean
+    change in the treated minus the calendar time that passed."""
+    ch = _end_changes(rows, clock)
     arm = np.array([c[0] for c in ch], float)
     y = np.array([c[1] for c in ch])
     if arm.min() == 1.0:
@@ -42,6 +45,32 @@ def clock_effect(rows, clock, weeks, use_plate=True) -> float:
         cols.append(plate)
     beta, *_ = np.linalg.lstsq(np.column_stack(cols), y, rcond=None)
     return float(beta[1])
+
+
+def covariate_shift(rows, name) -> float:
+    """Treated-minus-placebo mean change of a covariate (the treated mean change when there is no
+    placebo arm). Zero when the covariate was not measured."""
+    if name not in rows[0]:
+        return 0.0
+    ch = _end_changes(rows, name)
+    treated = [c[1] for c in ch if c[0]]
+    placebo = [c[1] for c in ch if not c[0]]
+    return float(np.mean(treated) - (np.mean(placebo) if placebo else 0.0))
+
+
+def calibrated_effects(spec, obs, names, use_plate=True, use_cards=True) -> dict:
+    """Each clock's effect in years of organ aging: raw change, minus what the measured covariate
+    shifts explain, divided by the clock's slope. With use_cards=False: the raw clock change."""
+    rows, weeks = obs["rows"], obs["weeks"]
+    shifts = {key: covariate_shift(rows, cov) for cov, key in COVARIATES.items()}
+    out = {}
+    for name in names:
+        x = clock_effect(rows, name, weeks, use_plate)
+        if use_cards:
+            card = spec["clocks"][name]["calibration"]
+            x = (x - sum(card[key] * shift for key, shift in shifts.items())) / card["years_per_year_of_aging"]
+        out[name] = x
+    return out
 
 
 def conservative_estimate(per_clock: dict) -> float:
@@ -59,6 +88,7 @@ def conservative_estimate(per_clock: dict) -> float:
 
 def report(effect: float) -> dict:
     e = round(float(effect), 3)
+    e = 0.0 if abs(e) < ZERO_BAND else e
     return {"effect_years": e, "geroprotective": bool(e <= GEROPROTECTIVE_THRESHOLD)}
 
 
@@ -67,9 +97,9 @@ def make_policy(design_changes=None, analysis="reference"):
 
     def policy(spec, obs=None):
         if obs is None:
-            return dict(design)
-        rows, weeks = obs["rows"], obs["weeks"]
-        per = {c: clock_effect(rows, c, weeks, use_plate=analysis != "ignore_plate") for c in design["clocks"]}
+            return {**design, "clocks": list(design["clocks"])}
+        per = calibrated_effects(spec, obs, design["clocks"], use_plate=analysis != "ignore_plate",
+                                 use_cards=analysis != "raw_changes")
         if analysis == "cherry_pick":
             return report(min(per.values()))
         if analysis == "pooled_mean":
@@ -93,6 +123,8 @@ POLICIES = {
     "ignore_plate": make_policy(analysis="ignore_plate"),
     "short_trial_4wk": make_policy({"weeks": 4}),
     "small_n_12": make_policy({"n_per_arm": 12}),
+    "no_covariates": make_policy({"measure_covariates": False}),
+    "raw_clock_changes": make_policy(analysis="raw_changes"),
     "proteomics_only": make_policy({"clocks": list(PROTEOMIC)}),
     "epigenetics_only": make_policy({"clocks": list(EPIGENETIC)}),
     "one_clock": make_policy({"clocks": ["prot_dense_chrono"]}),
@@ -107,6 +139,8 @@ MISTAKES = {
     "ignore_plate": "leave the follow-up plate out of the analysis",
     "short_trial_4wk": "stop at 4 weeks and report it as the 26-week effect",
     "small_n_12": "12 per arm instead of 30",
+    "no_covariates": "do not measure cell mix and inflammation, so known leaks stay in",
+    "raw_clock_changes": "ignore the calibration cards: read raw clock changes as years of aging",
     "proteomics_only": "one modality: the six proteomic clocks agree, so trust them",
     "epigenetics_only": "one modality: the two methylation clocks only",
     "one_clock": "one clock: the whole-panel chronological proteomic clock only",

@@ -16,7 +16,7 @@ import math
 import numpy as np
 
 from .biology import Cohort, N_CPG, N_PROT, ORGANS, PANEL, methylome, proteome, sample_cohort
-from .clocks import CLOCK_NAMES, clocks, read_clocks
+from .clocks import CLOCK_NAMES, clock_cards, clocks, read_clocks
 from .interventions import GEROPROTECTIVE_THRESHOLD, INTERVENTIONS, POTENCY_RANGE, ZERO
 
 WEEK_OPTIONS = (4, 12, 26)
@@ -38,6 +38,8 @@ class ClockTrialEnv:
 
     def __init__(self, seed: int = 0, intervention: str | None = None, cohort: str | None = None,
                  dose: int | None = None, potency: tuple | None = None):
+        if not (_is_int(seed) and seed >= 0):
+            raise ValueError("seed must be a non-negative int")
         self.seed = int(seed)
         rng = np.random.default_rng([self.seed, 1])
         names = sorted(INTERVENTIONS)
@@ -45,7 +47,7 @@ class ClockTrialEnv:
         drawn_iv = names[int(rng.integers(len(names)))]
         drawn_cohort = "fibrosis" if rng.random() < 0.5 else "healthy"
         drawn_dose = int(rng.integers(1, 4))
-        self.code = f"SIM-{int(rng.integers(100, 1000))}"
+        self.code = f"TOY-{int(rng.integers(100, 1000))}"
         drawn_potency = (float(rng.uniform(*POTENCY_RANGE)), float(rng.uniform(*POTENCY_RANGE)))
         if intervention is not None and intervention not in INTERVENTIONS:
             raise ValueError(f"unknown intervention {intervention!r}")
@@ -53,8 +55,11 @@ class ClockTrialEnv:
             raise ValueError(f"cohort must be one of {sorted(COHORTS)}")
         if dose is not None and not (_is_int(dose) and 1 <= dose <= 3):
             raise ValueError("dose must be 1, 2 or 3")
-        if potency is not None and not (len(potency) == 2 and all(p > 0 for p in potency)):
-            raise ValueError("potency must be two positive numbers (aging, everything else)")
+        if potency is not None:
+            ok = isinstance(potency, (tuple, list)) and len(potency) == 2 and all(
+                isinstance(q, (int, float)) and not isinstance(q, bool) and math.isfinite(q) and q > 0 for q in potency)
+            if not ok:
+                raise ValueError("potency must be two finite positive numbers (aging, everything else)")
         self.intervention = INTERVENTIONS[intervention if intervention is not None else drawn_iv]
         self.cohort = cohort if cohort is not None else drawn_cohort
         self.dose = int(dose) if dose is not None else drawn_dose
@@ -71,12 +76,16 @@ class ClockTrialEnv:
                          f"simulated compound {self.code} at dose level {self.dose} after {HORIZON_WEEKS} weeks, "
                          f"and call it geroprotective if the change is {GEROPROTECTIVE_THRESHOLD} years or lower."),
             "cohort": COHORTS[self.cohort],
-            "clocks": {n: {"family": c.family, "target": c.target, "inputs": c.inputs} for n, c in clocks().items()},
+            "clocks": {n: {"family": c.family, "target": c.target, "inputs": c.inputs,
+                           "calibration": dict(clock_cards()[n])} for n, c in clocks().items()},
+            "calibration_note": ("measured in simulated healthy people: years the clock's reading moves per year "
+                                 "of true organ aging, per SD of the blood cell mix covariate and per SD of the "
+                                 "inflammation covariate; how a clock reads disease activity is not known"),
             "design_schema": {"n_per_arm": f"int 8..{MAX_PER_ARM}", "placebo": "bool", "weeks": list(WEEK_OPTIONS),
                               "plate_layout": ["randomized", "by_arm"],
                               "measure_covariates": "bool (blood cell mix and an inflammation marker)",
                               "clocks": "list of clock names"},
-            "design_defaults": dict(DESIGN_DEFAULTS),
+            "design_defaults": {**DESIGN_DEFAULTS, "clocks": list(CLOCK_NAMES)},
             "report_schema": {"effect_years": "finite number",
                               "geroprotective": f"bool, must equal effect_years <= {GEROPROTECTIVE_THRESHOLD}"},
             "cost": f"{COST_PER_PARTICIPANT:.6f} reward per enrolled participant",
@@ -98,11 +107,13 @@ class ClockTrialEnv:
     def _validate_design(self, a) -> dict:
         if not isinstance(a, dict):
             raise ValueError("a design must be a dict")
+        if not all(isinstance(k, str) for k in a):
+            raise ValueError("design keys must be strings")
         unknown = sorted(set(a) - set(DESIGN_DEFAULTS))
         if unknown:
             hint = " (this env is waiting for a design, not a report)" if set(unknown) & set(REPORT_KEYS) else ""
             raise ValueError(f"unknown design keys {unknown}{hint}")
-        d = {**DESIGN_DEFAULTS, **a}
+        d = {**DESIGN_DEFAULTS, "clocks": list(CLOCK_NAMES), **a}
         if not (_is_int(d["n_per_arm"]) and 8 <= d["n_per_arm"] <= MAX_PER_ARM):
             raise ValueError(f"n_per_arm must be an int in 8..{MAX_PER_ARM}")
         if not (_is_int(d["weeks"]) and d["weeks"] in WEEK_OPTIONS):
@@ -110,10 +121,11 @@ class ClockTrialEnv:
         for key in ("placebo", "measure_covariates"):
             if not isinstance(d[key], bool):
                 raise ValueError(f"{key} must be true or false (a bool, not a string or number)")
-        if d["plate_layout"] not in ("randomized", "by_arm"):
+        if not isinstance(d["plate_layout"], str) or d["plate_layout"] not in ("randomized", "by_arm"):
             raise ValueError("plate_layout must be 'randomized' or 'by_arm'")
         cl = d["clocks"]
-        if not isinstance(cl, (list, tuple)) or not cl or len(set(cl)) != len(cl) or any(c not in CLOCK_NAMES for c in cl):
+        if (not isinstance(cl, (list, tuple)) or not cl or not all(isinstance(c, str) for c in cl)
+                or len(set(cl)) != len(cl) or any(c not in CLOCK_NAMES for c in cl)):
             raise ValueError(f"clocks must be a non-empty list of distinct names from {list(CLOCK_NAMES)}")
         d["n_per_arm"], d["weeks"], d["clocks"] = int(d["n_per_arm"]), int(d["weeks"]), list(cl)
         return d
@@ -180,7 +192,13 @@ class ClockTrialEnv:
         if not isinstance(action, dict) or set(action) != set(REPORT_KEYS):
             raise ValueError(f"a report must be a dict with exactly the keys {list(REPORT_KEYS)}")
         est, call = action["effect_years"], action["geroprotective"]
-        if isinstance(est, bool) or not isinstance(est, (int, float, np.integer, np.floating)) or not math.isfinite(est):
+        if isinstance(est, bool) or not isinstance(est, (int, float, np.integer, np.floating)):
+            raise ValueError("effect_years must be a finite number")
+        try:
+            finite = math.isfinite(float(est))
+        except OverflowError:
+            finite = False
+        if not finite:
             raise ValueError("effect_years must be a finite number")
         if not isinstance(call, (bool, np.bool_)):
             raise ValueError("geroprotective must be true or false (a bool, not a string or number)")

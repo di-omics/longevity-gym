@@ -26,8 +26,8 @@ The features are unnamed simulated numbers, not real proteins or CpG sites.
 |---|---|
 | proteins (240) | 25 per organ (175), 20 inflammation, 12 fibrosis only, 33 uninformative |
 | organ-enriched proteins | 0.3 to 1.0 per decade of that organ's age, random sign |
-| shared proteins | 4 of the 25 lung-enriched proteins: 1.0 to 1.2 per decade of lung age (rising) and 0.6 to 1.2 per unit of fibrosis activity |
-| other lung proteins | 0 to 0.3 per unit of fibrosis activity, each in its own "older" direction |
+| shared proteins | 4 of the 25 lung-enriched proteins: 1.0 to 1.2 per decade of lung age (rising), 0.6 to 1.2 per unit of fibrosis activity, and 0.3 times the person offset and measurement noise of the other proteins |
+| every other organ-enriched protein | 0 to 0.15 per unit of fibrosis activity, each in its own "older" direction: about one apparent year of aging per unit, with no change in organ age |
 | inflammation proteins | 0.6 to 1.0 per SD of inflammation |
 | fibrosis-only proteins | 0.6 to 1.2 per unit of fibrosis activity |
 | background loadings | every protein also carries inflammation (SD 0.03) and fibrosis (SD 0.02) |
@@ -50,14 +50,19 @@ omics cannot see. Training seed 20261118.
 |---|---|
 | prot_sparse_chrono | the 17 proteins most correlated with age |
 | prot_dense_chrono | the whole panel, then the weakest fifth by coefficient size dropped and refitted |
-| prot_sparse_mortality | 12 proteins by forward stepwise selection |
-| prot_age_mortality | chronological age plus 11 proteins by forward stepwise selection |
+| prot_sparse_mortality | 12 proteins picked one at a time: each step takes the protein most correlated with what the current fit leaves unexplained |
+| prot_age_mortality | chronological age plus 11 proteins picked the same way |
 | prot_dense_chrono_b | all 240 proteins |
 | prot_organ_chrono | 16 organ-enriched proteins: the best 2 per organ plus the best 2 of the rest |
 | epi_chrono, epi_mortality | all 200 methylation sites |
 
 The subset sizes follow the originals only loosely (7 percent of the panel for the ProtAge
 recipe, about 5 percent for the two mortality recipes) and are otherwise my choice.
+
+Calibration cards. For every clock the agent is told three numbers, measured in simulated
+healthy people with everything else held fixed: years of reading per year of true organ aging,
+per unit of the cell mix covariate and per unit of the inflammation covariate. How a clock
+reads fibrosis activity is not on its card.
 
 ## Interventions (interventions.py)
 
@@ -78,7 +83,8 @@ any real intervention. Shifts below are at full onset, dose level 2 and potency 
 | quantity | value |
 |---|---|
 | dose levels 1, 2, 3 | scale every effect by 0.5, 1.0, 1.3. Exception, mtor_like: aging 0.6, 1.0, 0.6 and cell mix 0, -0.45, -1.8 SD |
-| hidden potency | two multipliers per episode, each uniform 0.5 to 1.5: one for the aging effect, one for everything else |
+| hidden potency | two multipliers per episode, each uniform 0.25 to 1.75: one for the aging effect, one for everything else |
+| fibrosis and inflammation | linked at baseline only (0.5 SD per unit). During a trial a change in fibrosis activity does not move inflammation; the antifibrotic's -0.3 is a separate assumed number |
 | onset | aging effects and the methylation rewind build with a time constant of 6 to 12 weeks; the rest in 1.5 weeks |
 | individual response | SD 30 percent, one multiplier per person for all of the compound's effects |
 | change between visits without treatment | calendar time, plus organ age SD 0.15 years, inflammation SD 0.5, cell mix SD 0.4; fibrosis progresses 0.004 units per week |
@@ -88,12 +94,17 @@ any real intervention. Shifts below are at full onset, dose level 2 and potency 
 ## Task mix and reward (env.py)
 
 Each seed draws one of 8 archetypes, one of 2 cohorts and one of 3 dose levels with equal
-probability. On seeds 0 to 999, 45 percent of episodes have a true effect of exactly zero and 43
-percent are geroprotective.
+probability, then the two potencies. The QC card states how many of its episodes have a true
+effect of exactly zero and how many are geroprotective.
 
 Reward = 0.5 x exp(-|error| / 0.75 years) + 0.5 x (call correct) - cost, with cost 0.05 per 120
-enrolled people. Three consequences, all visible on the QC card:
+enrolled people. The QC card shows the consequences: a constant "no effect" answer already
+scores well above zero, the reward peaks at a small trial, and a very large trial scores lower
+than a very small one.
 
-- answering "no effect" without looking scores about 0.6;
-- under the reference analysis the reward peaks near 30 people per arm;
-- the cost term is steep: 150 per arm scores lower than 12 per arm.
+## Reference analysis (policies.py)
+
+30 per arm with placebo, 26 weeks, follow-up plates randomized, covariates measured. Reports
+under 0.2 years are rounded to exactly zero. The arm size of 30 was picked from the enrolment
+curve on the QC card's own seeds, so the card flatters it slightly. The zero band of 0.2 years
+was set by hand.

@@ -78,4 +78,4 @@ INTERVENTIONS = {i.name: i for i in (
 )}
 
 GEROPROTECTIVE_THRESHOLD = -0.5  # years at 26 weeks
-POTENCY_RANGE = (0.5, 1.5)
+POTENCY_RANGE = (0.25, 1.75)

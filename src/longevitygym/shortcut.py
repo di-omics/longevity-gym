@@ -6,10 +6,10 @@ of its own trials, and the truth that the env reveals after each finished episod
                     the median true effect it has seen for that archetype, dose and cohort
   classify_regress  recognises the archetype the same way, then predicts the effect with a
                     linear model fitted inside that archetype
-Both are trained on seeds 20000 to 22399 and scored on other seeds. The point is not that
-learning is cheating (learning which clocks to believe is the goal), but to check two things:
-that the hidden potency stops pure memorising from winning, and that the design lessons on the
-QC card still hold for a learner.
+Both are refitted on every run from seeds 20000 to 22399 and scored on other seeds. A third
+block scores them with the aging potency forced to 2.5, outside the range they were trained
+on: a policy that reads the clocks should not care, a policy that has learned this simulator's
+task mix should.
 """
 from __future__ import annotations
 
@@ -20,11 +20,15 @@ import numpy as np
 from .clocks import CLOCK_NAMES
 from .env import make
 from .interventions import GEROPROTECTIVE_THRESHOLD
-from .policies import POLICIES, REFERENCE_DESIGN, run_episode
+from .policies import COVARIATES, POLICIES, REFERENCE_DESIGN, clock_effect, covariate_shift, run_episode
 
-FEATURES = CLOCK_NAMES + ("lymphoid_z", "crp_z")
 TRAIN_SEEDS = range(20000, 22400)
-TEST_BLOCKS = {"seeds 0 to 399": range(0, 400), "seeds 1000 to 1399": range(1000, 1400)}
+OFF_RANGE_POTENCY = (2.5, 1.0)
+TEST_BLOCKS = {
+    "seeds 0 to 399": (range(0, 400), None),
+    "seeds 1000 to 1399": (range(1000, 1400), None),
+    "seeds 1000 to 1399, aging potency 2.5": (range(1000, 1400), OFF_RANGE_POTENCY),
+}
 DESIGNS = (
     ("same design as the reference", {}),
     ("12 per arm", {"n_per_arm": 12}),
@@ -40,41 +44,37 @@ def _task_keys(spec):
 
 
 def fingerprint(obs) -> np.ndarray:
-    """Treated-minus-placebo mean change of every clock and covariate (calendar time removed when
-    there is no placebo arm)."""
-    rows = obs["rows"]
-    base = {r["id"]: r for r in rows if r["timepoint"] == "baseline"}
-    change = {"treated": [], "placebo": []}
-    for r in rows:
-        if r["timepoint"] == "end":
-            change[r["arm"]].append([r[f] - base[r["id"]][f] for f in FEATURES])
-    treated = np.array(change["treated"]).mean(0)
-    if change["placebo"]:
-        return treated - np.array(change["placebo"]).mean(0)
-    treated[: len(CLOCK_NAMES)] -= obs["weeks"] / 52
-    return treated
+    """Plate-adjusted treated-minus-placebo change of every clock, and the shift of both covariates."""
+    rows, weeks = obs["rows"], obs["weeks"]
+    return np.array([clock_effect(rows, c, weeks) for c in CLOCK_NAMES] + [covariate_shift(rows, c) for c in COVARIATES])
 
 
-def train(design, mode: str):
-    """Returns a policy. mode: 'memoriser' or 'classify_regress'."""
+def collect(design) -> dict:
+    """One throwaway episode per training seed: fingerprint, task keys and the truth revealed at the end."""
     x, dose, cohort, archetype, truth = [], [], [], [], []
     for seed in TRAIN_SEEDS:
         env = make(seed=seed)
         spec = env.reset()
         obs, *_ = env.step(dict(design))
-        *_, info = env.step({"effect_years": 0.0, "geroprotective": False})   # throwaway report
+        *_, info = env.step({"effect_years": 0.0, "geroprotective": False})
         d, c = _task_keys(spec)
         x.append(fingerprint(obs)); dose.append(d); cohort.append(c)
         archetype.append(info["intervention"]); truth.append(info["true_effect_years"])
-    x, dose, cohort, archetype, truth = map(np.array, (x, dose, cohort, archetype, truth))
-    cells, resid = {}, []
+    return {"x": np.array(x), "dose": np.array(dose), "cohort": np.array(cohort),
+            "archetype": np.array(archetype), "truth": np.array(truth)}
+
+
+def fit(data: dict, design, mode: str):
+    """Returns a policy. mode: 'memoriser' or 'classify_regress'."""
+    x, truth = data["x"], data["truth"]
+    cells, resid, n_cells = {}, [], 0
     for c in ("fibrosis", "healthy"):
         for d in (1, 2, 3):
-            group = (cohort == c) & (dose == d)
+            group = (data["cohort"] == c) & (data["dose"] == d)
             centres, models = [], []
-            for a in sorted(set(archetype[group])):
-                m = group & (archetype == a)
-                centres.append(x[m].mean(0)); resid.append(x[m] - centres[-1])
+            for a in sorted(set(data["archetype"][group])):
+                m = group & (data["archetype"] == a)
+                centres.append(x[m].mean(0)); resid.append(x[m] - centres[-1]); n_cells += 1
                 if mode == "memoriser":
                     models.append(float(np.median(truth[m])))
                 else:
@@ -83,7 +83,7 @@ def train(design, mode: str):
                     models.append(np.linalg.solve(z.T @ z + pen, z.T @ truth[m]))
             cells[(c, d)] = (np.array(centres), models)
     resid = np.vstack(resid)
-    precision = np.linalg.inv(resid.T @ resid / (len(resid) - 48))
+    precision = np.linalg.inv(resid.T @ resid / (len(resid) - n_cells))
 
     def policy(spec, obs=None):
         if obs is None:
@@ -99,18 +99,23 @@ def train(design, mode: str):
     return policy
 
 
+def _score(policy, seeds, potency) -> np.ndarray:
+    kw = {} if potency is None else {"potency": potency}
+    return np.array([run_episode(make(seed=s, **kw), policy)[0] for s in seeds])
+
+
 def shortcut_table() -> list[dict]:
-    reference = {k: np.array([run_episode(make(seed=s), POLICIES["reference"])[0] for s in seeds])
-                 for k, seeds in TEST_BLOCKS.items()}
+    reference = {k: _score(POLICIES["reference"], seeds, potency) for k, (seeds, potency) in TEST_BLOCKS.items()}
     rows = [{"policy": "reference", "design": "reference design",
              **{k: {"mean": float(v.mean())} for k, v in reference.items()}}]
     for label, change in DESIGNS:
-        design = {**REFERENCE_DESIGN, **change, "measure_covariates": True}
+        design = {**REFERENCE_DESIGN, **change}
+        data = collect(design)
         for mode in ("memoriser", "classify_regress"):
-            policy = train(design, mode)
+            policy = fit(data, design, mode)
             row = {"policy": mode, "design": label}
-            for k, seeds in TEST_BLOCKS.items():
-                r = np.array([run_episode(make(seed=s), policy)[0] for s in seeds])
+            for k, (seeds, potency) in TEST_BLOCKS.items():
+                r = _score(policy, seeds, potency)
                 d = r - reference[k]
                 row[k] = {"mean": float(r.mean()), "gap": float(d.mean()),
                           "se": float(d.std(ddof=1) / np.sqrt(len(d)))}
@@ -123,7 +128,9 @@ def shortcut_markdown(rows=None) -> str:
     blocks = list(TEST_BLOCKS)
     out = ["# Shortcut check: learned policies against the reference", "",
            f"Trained on seeds {TRAIN_SEEDS.start} to {TRAIN_SEEDS.stop - 1}. Each cell: mean reward, then the paired "
-           "difference to the reference on the same seeds (standard error). Positive = beats the reference.", "",
+           "difference to the reference on the same seeds (standard error). Positive = beats the reference. In the "
+           "last column the hidden aging potency is forced to 2.5, outside the range of 0.25 to 1.75 that the "
+           "policies were trained on.", "",
            "| policy | trial design | " + " | ".join(blocks) + " |", "|---|---|" + "---|" * len(blocks)]
     for r in rows:
         cells = []

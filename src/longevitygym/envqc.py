@@ -31,7 +31,7 @@ def paired(reference: np.ndarray, other: np.ndarray) -> dict:
     return {"gap": gap, "se": se, "win_rate": wins, "verdict": verdict}
 
 
-def qc_card(n_seeds: int = 1000, first_seed: int = 0) -> dict:
+def qc_card(n_seeds: int = 2000, first_seed: int = 0) -> dict:
     if n_seeds < 2:
         raise ValueError("n_seeds must be at least 2")
     seeds = range(first_seed, first_seed + n_seeds)
@@ -72,7 +72,10 @@ def qc_card(n_seeds: int = 1000, first_seed: int = 0) -> dict:
                       **paired(reference, rewards)})
     weak = [{"archetype": iv, "dose": dose, "episodes": len(v), "call_accuracy": float(np.mean(v))}
             for (iv, dose), v in sorted(ref_cells.items())]
-    return {"env": "clock_trial", "n_seeds": n_seeds, "first_seed": first_seed, "rows": rows,
+    truths = [make(seed=seed).truth() for seed in seeds]
+    mix = {"true_effect_exactly_zero": float(np.mean([t["true_effect_years"] == 0 for t in truths])),
+           "geroprotective": float(np.mean([t["geroprotective"] for t in truths]))}
+    return {"env": "clock_trial", "n_seeds": n_seeds, "first_seed": first_seed, "task_mix": mix, "rows": rows,
             "mean_abs_error_by_intervention": by_iv, "enrolment_curve": curve, "reference_calls_by_cell": weak,
             "reference_wrong_calls": {k: int(v) for k, v in wrong.items()}}
 
@@ -80,7 +83,9 @@ def qc_card(n_seeds: int = 1000, first_seed: int = 0) -> dict:
 def card_markdown(card: dict) -> str:
     last = card["first_seed"] + card["n_seeds"] - 1
     out = [f"# Environment QC: {card['env']}", "",
-           f"Seeds {card['first_seed']} to {last}; every policy sees the same hidden compound, people and noise.", "",
+           f"Seeds {card['first_seed']} to {last}; every policy sees the same hidden compound, people and noise. "
+           f"In {100 * card['task_mix']['true_effect_exactly_zero']:.0f} percent of these episodes the true effect is "
+           f"exactly zero and in {100 * card['task_mix']['geroprotective']:.0f} percent the compound is geroprotective.", "",
            "| policy | what it changes | mean reward | median error (yr) | right call | gap to reference (SE) "
            "| reference wins | verdict |", "|---|---|---|---|---|---|---|---|"]
     for r in card["rows"]:
@@ -100,7 +105,7 @@ def card_markdown(card: dict) -> str:
     for policy, row in m.items():
         cells = []
         for iv in ivs:
-            flag = "**" if policy != "reference" and round(row[iv], 2) - round(m["reference"][iv], 2) >= 0.3 else ""
+            flag = "**" if policy != "reference" and round(row[iv], 2) - round(m["reference"][iv], 2) >= 0.295 else ""
             cells.append(f"{flag}{row[iv]:.2f}{flag}")
         out.append(f"| {policy} | " + " | ".join(cells) + " |")
     out += ["", "Bold = at least 0.3 years worse than the reference on that archetype.", ""]

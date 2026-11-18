@@ -1,7 +1,10 @@
 """Build README.md from docs/README.template.md and the files in results/.
 
-Every number in the README prose is a token in the template that is filled from results/, so
-the text cannot drift from the tables. Run after regenerating results:
+Every result number in the README prose is a token in the template that is filled from
+results/, and the sentences whose wording depends on a result (which mistakes are punished,
+what the shortcut check shows) are generated here, so the text cannot drift from the tables.
+Design constants (pool size, number of archetypes, seed counts) are written by hand in the
+template. Run after regenerating results:
 
     python tools/build_readme.py            # rewrite README.md
     python tools/build_readme.py --check    # exit 1 if README.md is out of date
@@ -9,6 +12,7 @@ the text cannot drift from the tables. Run after regenerating results:
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 import textwrap
@@ -16,10 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "results"
-PROTEOMIC = ["prot_sparse_chrono", "prot_dense_chrono", "prot_sparse_mortality", "prot_age_mortality",
-             "prot_dense_chrono_b", "prot_organ_chrono"]
 CHRONO = ["prot_sparse_chrono", "prot_dense_chrono", "prot_dense_chrono_b", "prot_organ_chrono"]
 MORTALITY = ["prot_sparse_mortality", "prot_age_mortality"]
+PROTEOMIC = CHRONO + MORTALITY
 EPI = ["epi_chrono", "epi_mortality"]
 CLOCK_COLS = {"r": "r", "mae": "MAE (yr)", "organ": "per year of organ aging", "inflam": "per SD inflammation",
               "fibrosis": "per unit fibrosis activity", "mix": "per SD cell mix"}
@@ -29,12 +32,16 @@ PHRASES = {
     "ignore_plate": "leaving the plate out of the analysis",
     "short_trial_4wk": "stopping at 4 weeks",
     "small_n_12": "enrolling 12 per arm instead of 30",
+    "no_covariates": "not measuring the two covariates",
+    "raw_clock_changes": "ignoring the calibration cards",
     "proteomics_only": "using the six proteomic clocks only",
     "epigenetics_only": "using the two methylation clocks only",
     "one_clock": "using the whole-panel chronological proteomic clock alone",
     "cherry_pick_best_clock": "reporting the best-looking clock",
     "average_all_clocks": "averaging all eight clocks",
 }
+OWN_BULLET = ("proteomics_only", "epigenetics_only", "average_all_clocks", "one_clock")
+SAME = "same design as the reference"
 
 
 def tables(path: Path) -> list[list[dict]]:
@@ -69,6 +76,10 @@ def bullet(text: str) -> str:
     return textwrap.fill(text, width=96, initial_indent="- ", subsequent_indent="  ")
 
 
+def judged(gap: float, se: float, win: str, lose: str, tie: str) -> str:
+    return win if gap >= 3 * se else lose if gap <= -3 * se else tie
+
+
 def build() -> str:
     card = json.loads((RES / "qc_clock_trial.json").read_text())
     qc = {r["policy"]: r for r in card["rows"]}
@@ -78,18 +89,22 @@ def build() -> str:
     seed = {r["clock"]: r for r in tables(RES / "clock_seed_check.md")[0]}
     read_fib, read_healthy = tables(RES / "readouts.md")
     read = {"fibrosis": {r["archetype"]: r for r in read_fib}, "healthy": {r["archetype"]: r for r in read_healthy}}
-    short = json.loads((RES / "shortcut.json").read_text())
-    blocks = [k for k in short[0] if k not in ("policy", "design")]
-    short = {(r["policy"], r["design"]): r for r in short}
+    short_rows = json.loads((RES / "shortcut.json").read_text())
+    blocks = [k for k in short_rows[0] if k not in ("policy", "design")]
+    short = {(r["policy"], r["design"]): r for r in short_rows}
+    assert len(blocks) == 3 and "potency" in blocks[2]
 
     cval = lambda name, col: num(clock[name][CLOCK_COLS[col]])
     rd = lambda arch, col: num(read["fibrosis"][arch][col])
     d = {
         "n_seeds": str(card["n_seeds"]),
+        "last_seed": str(card["first_seed"] + card["n_seeds"] - 1),
+        "zero_share": f"{100 * card['task_mix']['true_effect_exactly_zero']:.0f}",
+        "enrol_peak": str(max(enrol.values(), key=lambda r: r["mean"])["n_per_arm"]),
         "slope_min": f"{min(cval(c, 'organ') for c in clock):.2f}",
         "slope_max": f"{max(cval(c, 'organ') for c in clock):.2f}",
         "infl_mort": f"{sum(cval(c, 'inflam') for c in MORTALITY) / 2:.1f}",
-        "infl_chrono_max": f"{max(abs(cval(c, 'inflam')) for c in CHRONO):.2f}",
+        "infl_other_max": f"{max(abs(cval(c, 'inflam')) for c in CHRONO + EPI):.2f}",
         "fib_min": f"{min(cval(c, 'fibrosis') for c in PROTEOMIC):.2f}",
         "fib_max": f"{max(cval(c, 'fibrosis') for c in PROTEOMIC):.2f}",
         "antifib_truth": f"{abs(rd('antifibrotic', 'TRUTH')):.1f}",
@@ -102,72 +117,124 @@ def build() -> str:
         "reprog_epi_hi": f"{max(abs(rd('reprogramming_like', c)) for c in EPI):.1f}",
         "mix_epi": f"{abs(rd('immune_mobilizer', 'epi_chrono')):.1f}",
     }
-    # claims the fixed prose makes; fail loudly if new results no longer support them
-    assert all(rd("antifibrotic", c) < rd("antifibrotic", "TRUTH") for c in PROTEOMIC)
+    # What the fixed prose claims. Fail loudly if new results no longer support it.
+    assert all(rd("antifibrotic", c) < rd("antifibrotic", "TRUTH") < 0 for c in PROTEOMIC)
+    assert all(rd("antifibrotic", c) <= 0 for c in EPI)
     assert all(abs(num(v)) < 0.3 for k, v in read["healthy"]["antifibrotic"].items() if k != "archetype")
-    assert all(abs(rd("anti_inflammatory", c)) < 0.3 for c in CHRONO)
+    assert all(rd("anti_inflammatory", c) < -0.5 for c in MORTALITY)
+    assert all(abs(rd("anti_inflammatory", c)) < 0.3 for c in CHRONO + EPI)
     assert all(abs(rd("reprogramming_like", c) - rd("reprogramming_like", "TRUTH")) < 0.5 for c in PROTEOMIC)
+    assert all(abs(rd("immune_mobilizer", c)) < 0.3 for c in PROTEOMIC) and rd("immune_mobilizer", "epi_chrono") < -0.5
     for arch in ("senolytic_like", "mtor_like", "restriction_like"):
         assert all(rd(arch, c) < 0 for c in PROTEOMIC + EPI), arch
-    for name in ("cherry_pick_best_clock", "plates_by_arm", "no_placebo", "short_trial_4wk", "proteomics_only",
-                 "epigenetics_only", "average_all_clocks", "always_no", "always_yes"):
+    assert all(cval(c, "fibrosis") > 0.2 for c in PROTEOMIC) and all(abs(cval(c, "fibrosis")) < 0.05 for c in EPI)
+    assert max(cval(c, "fibrosis") for c in ("prot_dense_chrono", "prot_dense_chrono_b")) < min(
+        cval(c, "fibrosis") for c in PROTEOMIC if "dense" not in c)
+    for name in ("proteomics_only", "epigenetics_only", "average_all_clocks", "always_no", "always_yes"):
         assert qc[name]["verdict"] == "punished", name
+    assert errs["proteomics_only"]["antifibrotic"] > errs["reference"]["antifibrotic"] + 0.2
     assert enrol["150"]["mean"] < enrol["12"]["mean"] and enrol["150"]["call_accuracy"] > enrol["12"]["call_accuracy"]
-    assert max(enrol.values(), key=lambda r: r["mean"])["n_per_arm"] in (20, 30)
-    same = "same design as the reference"
-    for b in blocks:
-        assert abs(short[("memoriser", same)][b]["gap"]) < 3 * short[("memoriser", same)][b]["se"] + 0.01
-        assert short[("classify_regress", same)][b]["gap"] > 0
-        for design in ("no placebo arm", "stop at 4 weeks", "plates by arm"):
-            assert short[("classify_regress", design)][b]["gap"] < 0, design
 
-    named = [p for p in PHRASES if p in qc]
-    mild = [p for p in named if qc[p]["verdict"] == "punished" and qc[p]["gap"] < 0.04]
-    blind = [p for p in named if qc[p]["verdict"] == "blind"]
-    inverted = [p for p in named if qc[p]["verdict"] == "inverted"]
     listing = lambda ps: "; ".join(f"{PHRASES[p]} (gap {qc[p]['gap']:+.3f}, SE {qc[p]['se']:.3f})" for p in ps)
-    d["mild_bullet"] = bullet("Punished, but only mildly: " + listing(mild) + ".") if mild else ""
+    named = [p for p in PHRASES if p in qc]
+    top = sorted([p for p in named if p not in OWN_BULLET], key=lambda p: -qc[p]["gap"])[:4]
+    assert all(qc[p]["verdict"] == "punished" for p in top)
+    parts = [f"{PHRASES[p]} ({qc[p]['gap']:.2f}" + (" reward lost)" if i == 0 else ")") for i, p in enumerate(top)]
+    d["costliest_bullet"] = bullet("The costliest choices are " + ", ".join(parts[:-1]) + " and " + parts[-1] + ".")
+
+    oc, e1, e2 = qc["one_clock"], errs["one_clock"]["antifibrotic"], errs["reference"]["antifibrotic"]
+    if oc["verdict"] == "punished":
+        d["one_clock_bullet"] = bullet(
+            f"**One clock is not enough either.** Using the whole-panel chronological proteomic clock alone, with "
+            f"its calibration card, loses {oc['gap']:.2f} (SE {oc['se']:.3f}). It is the proteomic clock that reads "
+            f"fibrosis least, and it is still fooled on the antifibrotic archetype: its error there is {e1:.2f} years "
+            f"against {e2:.2f} for the reference.")
+    else:
+        word = "scores higher than the reference" if oc["verdict"] == "inverted" else "cannot be told from the reference"
+        d["one_clock_bullet"] = bullet(
+            f"**The reward does not yet pay for checking one modality against the other.** Using the whole-panel "
+            f"chronological proteomic clock alone, with its calibration card, {word} (gap {oc['gap']:+.3f}, SE "
+            f"{oc['se']:.3f}), although its error on the antifibrotic archetype is {e1:.2f} years against {e2:.2f}. "
+            "A harder version needs a mechanism that fools that clock more often.")
+    rest = [p for p in named if p not in OWN_BULLET and p not in top]
+    mild = [p for p in rest if qc[p]["verdict"] == "punished"]
+    blind = [p for p in rest if qc[p]["verdict"] == "blind"]
+    inverted = [p for p in rest if qc[p]["verdict"] == "inverted"]
+    d["mild_bullet"] = bullet("Also punished, by less: " + listing(mild) + ".") if mild else ""
     text = ""
     if blind:
         text = "**Blind spots, reported and not hidden.** The reward cannot tell the reference from " + listing(blind) + "."
-        if "one_clock" in blind:
-            text += (" In this simulator that clock is the one least sensitive to everything that is not aging, so"
-                     " using it alone costs nothing. A harder version needs a mechanism that fools it.")
     if inverted:
         text += (" " if text else "") + "**Inverted:** the reward prefers " + listing(inverted) + " to the reference."
-    d["blind_bullet"] = bullet(text or "**No blind spots on these seeds.** Every named mistake scores lower than "
-                               "the reference by at least three standard errors.")
+    d["blind_bullet"] = bullet(text) if text else ""
+
     weak = [c for c in card["reference_calls_by_cell"] if c["call_accuracy"] < 0.7]
-    if [(c["archetype"], c["dose"]) for c in weak] == [("mtor_like", 3)]:
-        c = weak[0]
-        d["weak_cells_bullet"] = bullet(
-            f"The reference has one weak cell: the mTOR-like archetype at dose level 3, where it makes the right "
-            f"call {100 * c['call_accuracy']:.0f} percent of the time ({c['episodes']} episodes). A cell-mix shift "
-            "pushes the chronological methylation clock the other way there, the methylation median shrinks "
-            "toward zero, and the conservative rule reports too little. The covariates would reveal the shift, "
-            "and the reference does not use them.")
-        w = card["reference_wrong_calls"]
-        assert w["missed_real_effects"] > 0.85 * w["total"]
-        d["weak_cells_bullet"] += "\n" + bullet(
-            f"The reference errs on the side of missing real effects: {w['missed_real_effects']} of its "
-            f"{w['total']} wrong calls are real effects called not geroprotective, and in "
-            f"{w['truth_within_0.3_years_of_threshold']} of the {w['total']} the true effect is within 0.3 years of "
-            "the half-year threshold. The clocks under-read real change by about a fifth and the rule is "
-            "conservative on top of that.")
+    if weak:
+        cells = "; ".join(f"{c['archetype']} at dose level {c['dose']} ({100 * c['call_accuracy']:.0f} percent of "
+                          f"{c['episodes']} episodes)" for c in weak)
+        d["weak_cells_bullet"] = bullet("On these seeds the reference makes the right call under 70 percent of the "
+                                        "time in: " + cells + ". With so few episodes per cell the figures are "
+                                        "rough. The table above lists every cell under 90 percent.")
     else:
-        cells = "; ".join(f"{c['archetype']} at dose level {c['dose']} ({100 * c['call_accuracy']:.0f} percent)" for c in weak)
-        d["weak_cells_bullet"] = bullet("Cells where the reference makes the right call under 70 percent of the "
-                                        "time: " + (cells or "none") + ".")
+        d["weak_cells_bullet"] = bullet("No cell of the reference is under 70 percent right calls on these seeds. "
+                                        "The table above lists the cells under 90 percent.")
+    w = card["reference_wrong_calls"]
+    d["wrong_calls_bullet"] = bullet(
+        f"Of the reference's {w['total']} wrong calls, {w['missed_real_effects']} are real effects called not "
+        f"geroprotective and {w['false_alarms']} are false alarms. In {w['truth_within_0.3_years_of_threshold']} of "
+        f"the {w['total']} the true effect is within 0.3 years of the half-year threshold.")
+
+    def pooled(policy, design):
+        a, b = short[(policy, design)][blocks[0]], short[(policy, design)][blocks[1]]
+        return (a["gap"] + b["gap"]) / 2, math.sqrt(a["se"] ** 2 + b["se"] ** 2) / 2
+
+    ref_row = short[("reference", "reference design")]
+    means = lambda policy, design: [short[(policy, design)][b]["mean"] for b in blocks]
+    mg, ms = pooled("memoriser", SAME)
+    m = means("memoriser", SAME)
+    r = [ref_row[b]["mean"] for b in blocks]
+    d["memoriser_bullet"] = bullet(
+        f"**Pure memorising.** Recognising the archetype and answering with a memorised effect scores {m[0]:.3f} and "
+        f"{m[1]:.3f} on two blocks of new seeds, against {r[0]:.3f} and {r[1]:.3f} for the reference. Pooled over the "
+        f"two blocks the difference is {mg:+.3f} (SE {ms:.3f}): "
+        + judged(mg, ms, "memorising beats the reference, so this reward still pays for it.",
+                 "memorising loses.", "a tie within the noise, so memorising neither wins nor clearly loses."))
+    lg, ls = pooled("classify_regress", SAME)
+    c = means("classify_regress", SAME)
+    d["learner_bullet"] = bullet(
+        f"**Learning inside the task mix.** Recognising the archetype and then estimating inside it scores "
+        f"{c[0]:.3f} and {c[1]:.3f}. Pooled difference to the reference: {lg:+.3f} (SE {ls:.3f}): "
+        + judged(lg, ls, "it beats the reference.", "it loses to the reference.", "a tie within the noise."))
+    om, ol = short[("memoriser", SAME)][blocks[2]], short[("classify_regress", SAME)][blocks[2]]
+    word = lambda c: judged(c["gap"], c["se"], "stays ahead of the reference", "falls behind the reference",
+                            "stays level with the reference")
+    d["off_range_bullet"] = bullet(
+        f"**Outside the potency range they were trained on** (aging potency forced to 2.5) the memoriser scores "
+        f"{om['mean']:.3f} and the learner {ol['mean']:.3f}, against {r[2]:.3f} for the reference (differences "
+        f"{om['gap']:+.3f}, SE {om['se']:.3f}, and {ol['gap']:+.3f}, SE {ol['se']:.3f}). The memoriser {word(om)}; "
+        f"the learner {word(ol)}. A policy that reads the clocks should not care about the range, so this column "
+        "is the one to watch when a stronger learner is trained here.")
+    full = means("classify_regress", SAME)
+    cost = {k: [full[i] - means("classify_regress", k)[i] for i in (0, 1)]
+            for k in ("no placebo arm", "stop at 4 weeks", "plates by arm", "12 per arm")}
+    assert all(v > 0 for k in ("no placebo arm", "stop at 4 weeks", "plates by arm") for v in cost[k])
+    d["lessons_bullet"] = bullet(
+        f"**The design lessons still cost the learner.** Against its own full design, taking away the placebo arm "
+        f"costs it {cost['no placebo arm'][0]:.3f}, stopping at 4 weeks {cost['stop at 4 weeks'][0]:.3f} and putting "
+        f"each arm on its own plate {cost['plates by arm'][0]:.3f} on the first block "
+        f"({cost['no placebo arm'][1]:.3f}, {cost['stop at 4 weeks'][1]:.3f} and {cost['plates by arm'][1]:.3f} on "
+        f"the second). Enrolling 12 per arm instead of 30 changes its score by {-cost['12 per arm'][0]:+.3f} and "
+        f"{-cost['12 per arm'][1]:+.3f}.")
 
     def token(m):
         kind, *args = m.group(1).split(":")
         if kind == "TABLE":
             if args[0] == "clocks":
-                return (RES / "clocks.md").read_text().strip("\n")
+                return "\n".join(l for l in (RES / "clocks.md").read_text().splitlines() if l.startswith("|"))
             if args[0] == "readouts":
                 text = body(RES / "readouts.md", demote=False)
-                caption, rest = text.split("## Cohort: fibrosis")
-                table = rest.split("## Cohort: healthy")[0].strip("\n")
+                caption, rest_ = text.split("## Cohort: fibrosis")
+                table = rest_.split("## Cohort: healthy")[0].strip("\n")
                 return (textwrap.fill(" ".join(caption.split()) + " Fibrosis cohort shown; the healthy cohort is in "
                                       "[results/readouts.md](results/readouts.md).", width=96) + "\n\n" + table)
             if args[0] == "qc":
@@ -178,8 +245,11 @@ def build() -> str:
             return d[args[0]]
         if kind == "qc":
             row, field = qc[args[0]], args[1]
+            if field == "gap":
+                assert row["gap"] > 0, args[0]          # the prose around this token says "loses"
+                return f"{row['gap']:.2f}"
             return {"mean": f"{row['mean']:.2f}", "err": f"{row['median_abs_error_years']:.2f}",
-                    "call": f"{100 * row['call_accuracy']:.0f}", "gap": f"{abs(row.get('gap', 0)):.2f}"}[field]
+                    "call": f"{100 * row['call_accuracy']:.0f}"}[field]
         if kind == "err":
             return f"{errs[args[0]][args[1]]:.2f}"
         if kind == "enrol":
@@ -189,9 +259,6 @@ def build() -> str:
             return clock[args[0]][CLOCK_COLS[args[1]]]
         if kind == "seed":
             return seed[args[0]][CLOCK_COLS[args[1]]].replace("+", "")
-        if kind == "short":
-            cell = short[(args[0], args[1])][blocks[int(args[2])]]
-            return f"{cell['mean']:.3f}" if args[3] == "mean" else f"{cell['gap']:+.3f}".lstrip("+")
         raise KeyError(m.group(1))
 
     text = re.sub(r"<<([^<>]+)>>", token, (ROOT / "docs" / "README.template.md").read_text())
