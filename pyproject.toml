@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "longevity-gym"
 version = "0.1.0"
-description = "Simulation-first RL environments for judging longevity interventions with multi-omic aging clocks"
+description = "A simulated RL environment: did the intervention make simulated people younger, or only move the clocks?"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["numpy>=1.26"]

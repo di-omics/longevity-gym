@@ -1,63 +1,90 @@
-"""clock_trial: design a small trial of an unknown intervention, read the clocks, and say what it did.
+"""clock_trial: design a small simulated trial of an unknown intervention, read the clocks, say what it did.
 
-Episode = two steps.
-  reset() -> task: a coded compound, its assigned dose level, the cohort, the menu of clocks.
-  step(design) -> per-sample clock readings (and covariates, if you paid for them).
+One env object is one episode, in two steps.
+  reset() -> task: a coded simulated compound, its dose level, the cohort, the menu of clocks.
+  step(design) -> per-sample clock readings (and two covariates, if you asked for them).
   step(report) -> reward. Truth is revealed only in the final info.
 
 The question is always the same: by how many years does this compound change biological age
-(mean organ age, by definition) at 26 weeks, relative to placebo, and is that change at least
-half a year younger (geroprotective)? A clock moving is evidence, not the answer.
+(mean organ age, by this simulator's definition) at 26 weeks, relative to placebo, and is that
+change at least half a year younger (geroprotective)? A clock moving is evidence, not the answer.
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
-from .biology import N_CPG, N_PROT, ORGANS, PANEL, methylome, proteome, sample_cohort
+from .biology import Cohort, N_CPG, N_PROT, ORGANS, PANEL, methylome, proteome, sample_cohort
 from .clocks import CLOCK_NAMES, clocks, read_clocks
-from .interventions import GEROPROTECTIVE_THRESHOLD, INTERVENTIONS
+from .interventions import GEROPROTECTIVE_THRESHOLD, INTERVENTIONS, POTENCY_RANGE, ZERO
 
 WEEK_OPTIONS = (4, 12, 26)
 HORIZON_WEEKS = 26
+MAX_PER_ARM = 150
 COST_PER_PARTICIPANT = 0.05 / 120
+COHORTS = {"fibrosis": "adults 45 to 80 with fibrotic lung disease", "healthy": "healthy adults 45 to 80"}
+DESIGN_DEFAULTS = {"n_per_arm": 40, "placebo": True, "weeks": 26, "plate_layout": "randomized",
+                   "measure_covariates": False, "clocks": list(CLOCK_NAMES)}
+REPORT_KEYS = ("effect_years", "geroprotective")
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, (int, np.integer)) and not isinstance(v, bool)
 
 
 class ClockTrialEnv:
     name = "clock_trial"
 
     def __init__(self, seed: int = 0, intervention: str | None = None, cohort: str | None = None,
-                 dose: int | None = None):
-        self.seed = seed
-        rng = np.random.default_rng([seed, 1])
+                 dose: int | None = None, potency: tuple | None = None):
+        self.seed = int(seed)
+        rng = np.random.default_rng([self.seed, 1])
         names = sorted(INTERVENTIONS)
-        self.intervention = INTERVENTIONS[intervention or names[int(rng.integers(len(names)))]]
-        self.cohort = cohort or ("fibrosis" if rng.random() < 0.5 else "healthy")
-        self.dose = int(dose or rng.integers(1, 4))
-        self.code = f"LG-{int(rng.integers(100, 1000))}"
+        # every draw is always consumed, so a forced argument never shifts the others
+        drawn_iv = names[int(rng.integers(len(names)))]
+        drawn_cohort = "fibrosis" if rng.random() < 0.5 else "healthy"
+        drawn_dose = int(rng.integers(1, 4))
+        self.code = f"SIM-{int(rng.integers(100, 1000))}"
+        drawn_potency = (float(rng.uniform(*POTENCY_RANGE)), float(rng.uniform(*POTENCY_RANGE)))
+        if intervention is not None and intervention not in INTERVENTIONS:
+            raise ValueError(f"unknown intervention {intervention!r}")
+        if cohort is not None and cohort not in COHORTS:
+            raise ValueError(f"cohort must be one of {sorted(COHORTS)}")
+        if dose is not None and not (_is_int(dose) and 1 <= dose <= 3):
+            raise ValueError("dose must be 1, 2 or 3")
+        if potency is not None and not (len(potency) == 2 and all(p > 0 for p in potency)):
+            raise ValueError("potency must be two positive numbers (aging, everything else)")
+        self.intervention = INTERVENTIONS[intervention if intervention is not None else drawn_iv]
+        self.cohort = cohort if cohort is not None else drawn_cohort
+        self.dose = int(dose) if dose is not None else drawn_dose
+        self.potency = tuple(float(p) for p in potency) if potency is not None else drawn_potency
         self._stage = "design"
         self._design = None
+        self._enrolled = 0
 
     # ------------------------------------------------------------------ spec
     def spec(self) -> dict:
         return {
             "env": self.name,
             "question": ("Estimate the change in biological age (years, treated minus placebo) caused by "
-                         f"compound {self.code} at dose level {self.dose} after {HORIZON_WEEKS} weeks, and call it "
-                         f"geroprotective if the change is {GEROPROTECTIVE_THRESHOLD} years or more negative."),
-            "cohort": {"fibrosis": "adults 45 to 80 with fibrotic lung disease",
-                       "healthy": "healthy adults 45 to 80"}[self.cohort],
-            "clocks": {n: {"family": c.family, "target": c.target, "trained_on": c.trained_on,
-                           "analog_of": c.analog_of} for n, c in clocks().items()},
-            "design_schema": {"n_per_arm": "int 8..150", "placebo": "bool", "weeks": list(WEEK_OPTIONS),
-                              "batch_layout": ["randomized", "by_arm"],
-                              "measure_covariates": "bool (blood cell mix + CRP-like inflammation marker)",
+                         f"simulated compound {self.code} at dose level {self.dose} after {HORIZON_WEEKS} weeks, "
+                         f"and call it geroprotective if the change is {GEROPROTECTIVE_THRESHOLD} years or lower."),
+            "cohort": COHORTS[self.cohort],
+            "clocks": {n: {"family": c.family, "target": c.target, "inputs": c.inputs} for n, c in clocks().items()},
+            "design_schema": {"n_per_arm": f"int 8..{MAX_PER_ARM}", "placebo": "bool", "weeks": list(WEEK_OPTIONS),
+                              "plate_layout": ["randomized", "by_arm"],
+                              "measure_covariates": "bool (blood cell mix and an inflammation marker)",
                               "clocks": "list of clock names"},
-            "report_schema": {"effect_years": "float", "geroprotective": "bool"},
+            "design_defaults": dict(DESIGN_DEFAULTS),
+            "report_schema": {"effect_years": "finite number",
+                              "geroprotective": f"bool, must equal effect_years <= {GEROPROTECTIVE_THRESHOLD}"},
             "cost": f"{COST_PER_PARTICIPANT:.6f} reward per enrolled participant",
         }
 
     def reset(self) -> dict:
-        self._stage, self._design = "design", None
+        if self._stage != "design":
+            raise RuntimeError("one env object is one episode: make a new env (new seed) for a new task")
         return {"stage": "design", **self.spec()}
 
     # ------------------------------------------------------------------ step
@@ -66,101 +93,108 @@ class ClockTrialEnv:
             return self._run_trial(action)
         if self._stage == "report":
             return self._score(action)
-        raise RuntimeError("episode is over; call reset()")
+        raise RuntimeError("episode is over: make a new env (new seed) for a new task")
 
-    def _validate(self, a: dict) -> dict:
-        d = {"n_per_arm": int(a.get("n_per_arm", 40)), "placebo": bool(a.get("placebo", True)),
-             "weeks": int(a.get("weeks", 26)), "batch_layout": a.get("batch_layout", "randomized"),
-             "measure_covariates": bool(a.get("measure_covariates", False)),
-             "clocks": list(a.get("clocks", CLOCK_NAMES))}
-        if not 8 <= d["n_per_arm"] <= 150:
-            raise ValueError("n_per_arm must be 8..150")
-        if d["weeks"] not in WEEK_OPTIONS:
+    def _validate_design(self, a) -> dict:
+        if not isinstance(a, dict):
+            raise ValueError("a design must be a dict")
+        unknown = sorted(set(a) - set(DESIGN_DEFAULTS))
+        if unknown:
+            hint = " (this env is waiting for a design, not a report)" if set(unknown) & set(REPORT_KEYS) else ""
+            raise ValueError(f"unknown design keys {unknown}{hint}")
+        d = {**DESIGN_DEFAULTS, **a}
+        if not (_is_int(d["n_per_arm"]) and 8 <= d["n_per_arm"] <= MAX_PER_ARM):
+            raise ValueError(f"n_per_arm must be an int in 8..{MAX_PER_ARM}")
+        if not (_is_int(d["weeks"]) and d["weeks"] in WEEK_OPTIONS):
             raise ValueError(f"weeks must be one of {WEEK_OPTIONS}")
-        if d["batch_layout"] not in ("randomized", "by_arm"):
-            raise ValueError("batch_layout must be randomized or by_arm")
-        bad = [c for c in d["clocks"] if c not in CLOCK_NAMES]
-        if bad or not d["clocks"]:
-            raise ValueError(f"unknown or empty clocks: {bad}")
+        for key in ("placebo", "measure_covariates"):
+            if not isinstance(d[key], bool):
+                raise ValueError(f"{key} must be true or false (a bool, not a string or number)")
+        if d["plate_layout"] not in ("randomized", "by_arm"):
+            raise ValueError("plate_layout must be 'randomized' or 'by_arm'")
+        cl = d["clocks"]
+        if not isinstance(cl, (list, tuple)) or not cl or len(set(cl)) != len(cl) or any(c not in CLOCK_NAMES for c in cl):
+            raise ValueError(f"clocks must be a non-empty list of distinct names from {list(CLOCK_NAMES)}")
+        d["n_per_arm"], d["weeks"], d["clocks"] = int(d["n_per_arm"]), int(d["weeks"]), list(cl)
         return d
 
-    def _run_trial(self, action: dict):
-        d = self._design = self._validate(action)
-        rng = np.random.default_rng([self.seed, 2])
-        # plate effects: random per feature, plus a systematic part that lands on the aging axis
-        # (signal compression or drift between runs). Assumed ~1 to 2 clock-years SD per batch.
-        prot_batch = rng.normal(0, 0.25, (3, N_PROT)) + np.outer(rng.normal(0, 0.15, 3), PANEL.prot_age_w)
-        cpg_batch = rng.normal(0, 0.12, (3, N_CPG)) + np.outer(rng.normal(0, 0.12, 3), PANEL.cpg_age_w)
-        arms = (["treated", "placebo"] if d["placebo"] else ["treated"])
+    def _run_trial(self, action):
+        d = self._validate_design(action)
+        self._design = d
+        n, w = d["n_per_arm"], d["weeks"]
+        arms = ["treated", "placebo"] if d["placebo"] else ["treated"]
+        self._enrolled += n * len(arms)
+        # plate effects: random per feature, plus a systematic part along the aging axis
+        prng = np.random.default_rng([self.seed, 2])
+        prot_plate = prng.normal(0, 0.25, (3, N_PROT)) + np.outer(prng.normal(0, 0.15, 3), PANEL.prot_age_w)
+        cpg_plate = prng.normal(0, 0.12, (3, N_CPG)) + np.outer(prng.normal(0, 0.12, 3), PANEL.cpg_age_w)
         rows = []
-        for k, arm in enumerate(arms):
-            # the same people for any n (first n of 150), so policies are compared on paired cohorts
-            prng = np.random.default_rng([self.seed, 3, k])
-            full = sample_cohort(prng, 150, disease="fibrosis" if self.cohort == "fibrosis" else "none")
-            c = _subset(full, d["n_per_arm"])
-            rng = np.random.default_rng([self.seed, 4, k])
-            n, w = c.n, d["weeks"]
-            base_b = np.zeros(n, int)
-            xp0, xm0 = proteome(c, rng, prot_batch[base_b]), methylome(c, rng, cpg_batch[base_b])
-            cov0 = self._covariates(c, rng)
-            # advance time
-            resp = np.clip(rng.normal(1.0, 0.3, n), 0, None)
-            eff = (self.intervention.effects_at(w, self.dose, self.cohort) if arm == "treated"
-                   else {"organ": np.zeros(len(ORGANS)), "inflam": 0.0, "disease": 0.0, "mix": 0.0, "epi_direct": 0.0})
-            c.chrono = c.chrono + w / 52
-            c.organ_age = c.organ_age + w / 52 + np.outer(resp, eff["organ"]) + rng.normal(0, 0.15, c.organ_age.shape)
-            c.inflam = c.inflam + rng.normal(0, 0.5, n) + resp * eff["inflam"]
-            c.mix = c.mix + rng.normal(0, 0.4, n) + resp * eff["mix"]
+        for k, arm in enumerate(("treated", "placebo")):
+            if arm not in arms:
+                continue
+            # Everything random is drawn for MAX_PER_ARM people in a fixed order and then cut to n, so
+            # designs that differ in size, layout or duration are compared on the same people and noise.
+            rng = np.random.default_rng([self.seed, 3, k])
+            c0 = sample_cohort(rng, MAX_PER_ARM, disease="fibrosis" if self.cohort == "fibrosis" else "none")
+            m = c0.n
+            resp = np.clip(rng.normal(1.0, 0.3, m), 0, None)
+            organ_drift, inflam_drift, mix_drift = rng.normal(0, 0.15, c0.organ_age.shape), rng.normal(0, 0.5, m), rng.normal(0, 0.4, m)
+            random_plate = rng.integers(1, 3, m)
+            cov_noise = rng.normal(0, 0.3, (4, m))
+            xp0, xm0 = proteome(c0, rng, prot_plate[0]), methylome(c0, rng, cpg_plate[0])
+            eff = self.intervention.effects_at(w, self.dose, self.cohort, self.potency) if arm == "treated" else ZERO
+            disease1 = c0.disease
             if self.cohort == "fibrosis":
-                c.disease = np.clip(c.disease + 0.004 * w + resp * eff["disease"], 0, None)
-            if d["batch_layout"] == "by_arm":
-                end_b = np.full(n, 2 if arm == "treated" else 1)
-            else:
-                end_b = rng.integers(1, 3, n)
-            xp1 = proteome(c, rng, prot_batch[end_b])
-            xm1 = methylome(c, rng, cpg_batch[end_b], epi_direct=resp * eff["epi_direct"])
-            cov1 = self._covariates(c, rng)
-            r0, r1 = read_clocks(xp0, xm0, d["clocks"]), read_clocks(xp1, xm1, d["clocks"])
+                disease1 = np.clip(c0.disease + 0.004 * w + resp * eff["disease"], 0, None)
+            c1 = Cohort(c0.chrono + w / 52,
+                        c0.organ_age + w / 52 + np.outer(resp, eff["organ"]) + organ_drift,
+                        c0.inflam + inflam_drift + resp * eff["inflam"], disease1,
+                        c0.mix + mix_drift + resp * eff["mix"], c0.prot_person, c0.cpg_person)
+            plate1 = np.full(m, 2 if arm == "treated" else 1) if d["plate_layout"] == "by_arm" else random_plate
+            xp1 = proteome(c1, rng, prot_plate[plate1])
+            xm1 = methylome(c1, rng, cpg_plate[plate1], epi_direct=resp * eff["epi_direct"])
+            r0 = read_clocks(xp0, xm0, c0.chrono, d["clocks"])
+            r1 = read_clocks(xp1, xm1, c1.chrono, d["clocks"])
+            cov0 = {"lymphoid_z": c0.mix + cov_noise[0], "crp_z": c0.inflam + cov_noise[1]}
+            cov1 = {"lymphoid_z": c1.mix + cov_noise[2], "crp_z": c1.inflam + cov_noise[3]}
             for i in range(n):
                 pid = f"{arm[0].upper()}{i:03d}"
-                for tp, rr, bb, cov in (("baseline", r0, base_b, cov0), ("end", r1, end_b, cov1)):
-                    row = {"id": pid, "arm": arm, "timepoint": tp, "batch": int(bb[i]),
-                           **{k: round(float(v[i]), 3) for k, v in rr.items()}}
+                for tp, cc, rr, plate, cov in (("baseline", c0, r0, 0, cov0), ("end", c1, r1, int(plate1[i]), cov1)):
+                    row = {"id": pid, "arm": arm, "timepoint": tp, "plate": plate, "age": round(float(cc.chrono[i]), 2),
+                           **{name: round(float(v[i]), 3) for name, v in rr.items()}}
                     if d["measure_covariates"]:
-                        row.update({k: round(float(v[i]), 3) for k, v in cov.items()})
+                        row.update({name: round(float(v[i]), 3) for name, v in cov.items()})
                     rows.append(row)
         self._stage = "report"
-        return {"stage": "report", "weeks": d["weeks"], "rows": rows,
-                "note": "clock values are predicted ages in years; covariates are z-scored"}, 0.0, False, {}
-
-    @staticmethod
-    def _covariates(c, rng) -> dict:
-        return {"lymphoid_z": c.mix + rng.normal(0, 0.3, c.n), "crp_z": c.inflam + rng.normal(0, 0.3, c.n)}
+        return {"stage": "report", "weeks": w, "rows": rows,
+                "note": "clock values are predicted ages in years; covariates are in reference SD units"}, 0.0, False, {}
 
     def truth(self) -> dict:
         iv = self.intervention
-        eff = iv.true_effect(self.dose, self.cohort, HORIZON_WEEKS)
+        eff = iv.true_effect(self.dose, self.cohort, HORIZON_WEEKS, self.potency)
         return {"intervention": iv.name, "mechanism": iv.mechanism, "dose": self.dose, "cohort": self.cohort,
+                "potency_aging": self.potency[0], "potency_other": self.potency[1],
                 "true_effect_years": eff, "geroprotective": eff <= GEROPROTECTIVE_THRESHOLD}
 
-    def _score(self, action: dict):
-        est = float(action["effect_years"])
-        call = bool(action["geroprotective"])
+    def _score(self, action):
+        if not isinstance(action, dict) or set(action) != set(REPORT_KEYS):
+            raise ValueError(f"a report must be a dict with exactly the keys {list(REPORT_KEYS)}")
+        est, call = action["effect_years"], action["geroprotective"]
+        if isinstance(est, bool) or not isinstance(est, (int, float, np.integer, np.floating)) or not math.isfinite(est):
+            raise ValueError("effect_years must be a finite number")
+        if not isinstance(call, (bool, np.bool_)):
+            raise ValueError("geroprotective must be true or false (a bool, not a string or number)")
+        est, call = float(est), bool(call)
+        if call != (est <= GEROPROTECTIVE_THRESHOLD):
+            raise ValueError(f"geroprotective must equal effect_years <= {GEROPROTECTIVE_THRESHOLD}")
         t = self.truth()
         err = abs(est - t["true_effect_years"])
-        n_total = self._design["n_per_arm"] * (2 if self._design["placebo"] else 1)
-        cost = COST_PER_PARTICIPANT * n_total
-        reward = 0.5 * float(np.exp(-err / 0.75)) + 0.5 * float(call == t["geroprotective"]) - cost
+        cost = COST_PER_PARTICIPANT * self._enrolled
+        reward = 0.5 * math.exp(-err / 0.75) + 0.5 * float(call == t["geroprotective"]) - cost
         self._stage = "done"
         info = {**t, "estimate": est, "call": call, "abs_error": err, "cost": cost,
                 "call_correct": call == t["geroprotective"], "design": self._design}
         return {"stage": "done"}, reward, True, info
-
-
-def _subset(c, n):
-    from .biology import Cohort
-    return Cohort(c.chrono[:n], c.organ_age[:n], c.inflam[:n], c.disease[:n], c.mix[:n],
-                  c.prot_person[:n], c.cpg_person[:n])
 
 
 def make(name: str = "clock_trial", seed: int = 0, **kw) -> ClockTrialEnv:
