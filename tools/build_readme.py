@@ -226,6 +226,64 @@ def build() -> str:
         f"the second). Enrolling 12 per arm instead of 30 changes its score by {-cost['12 per arm'][0]:+.3f} and "
         f"{-cost['12 per arm'][1]:+.3f}.")
 
+    # ---- the real-data section
+    real = json.loads((RES / "real_check.json").read_text())
+    cal = json.loads((RES / "qc_clock_trial_calibrated.json").read_text())
+    assert cal["noise"] == "calibrated" and cal["n_seeds"] == card["n_seeds"]
+    calqc = {r["policy"]: r for r in cal["rows"]}
+    calenrol = {str(r["n_per_arm"]): r for r in cal["enrolment_curve"]}
+    est = [v["estimate"] for v in real["real"]["change_sd"].values()]
+    quiet = real["default_too_quiet_by"]
+    assert quiet["min"] > 2
+    d["real_quiet_bullet"] = bullet(
+        f"**The simulator is far too quiet.** For the six real clocks in that trial's patients, one person's change "
+        f"between two visits has an SD of about {min(est):.1f} to {max(est):.1f} years. That covers everything that "
+        f"makes two visits differ: assay noise, short-term biology and, in the treated arms, differences in "
+        f"response. The estimate is indirect: it is backed out of the paper's published test statistics. The "
+        f"simulator's default is {quiet['min']:.1f} to {quiet['max']:.1f} times smaller.")
+    analog = real["analog"]
+    chrono = [n for n in analog if "mortality" not in n]
+    mort = [n for n in analog if "mortality" in n]
+    def span(source, rows_, cols_, real_names):
+        vals = [source[analog[a] if real_names else a][analog[b] if real_names else b]
+                for a in rows_ for b in cols_ if a != b]
+        return f"{min(vals):.2f} to {max(vals):.2f}"
+    rc, dc, cc = real["real"]["corr"], real["default"]["corr"], real["calibrated"]["corr"]
+    d["real_corr_bullet"] = bullet(
+        f"**Simulated clocks agree with each other far more than real ones.** Over samples, the four real "
+        f"chronological clocks correlate {span(rc, chrono, chrono, True)} with each other and "
+        f"{span(rc, chrono, mort, True)} with the two mortality clocks. In the simulator those correlations are "
+        f"{span(dc, chrono, chrono, False)} and {span(dc, chrono, mort, False)}, and calibrating the noise only "
+        f"brings them to {span(cc, chrono, chrono, False)} and {span(cc, chrono, mort, False)}. Real patients differ "
+        "along more dimensions than these simulated ones, and no noise setting fixes that.")
+    cr, dr = calqc["reference"], qc["reference"]
+    peak = max(calenrol.values(), key=lambda r: r["mean"])["n_per_arm"]
+    d["real_card_bullet"] = bullet(
+        f"**With real-world noise the task is much harder.** `make(seed, noise=\"calibrated\")` adds reading noise to "
+        f"every clock until its change-score SD matches the real estimate. Under it the reference analysis scores "
+        f"{cr['mean']:.2f} instead of {dr['mean']:.2f} and makes the right call {100 * cr['call_accuracy']:.0f} "
+        f"percent of the time instead of {100 * dr['call_accuracy']:.0f}, at 30 per arm. At 150 per arm it makes the "
+        f"right call {100 * calenrol['150']['call_accuracy']:.0f} percent of the time, and on the enrolment grid the "
+        f"reward is highest at {peak} per arm. The full card is in "
+        "[results/qc_clock_trial_calibrated.md](results/qc_clock_trial_calibrated.md).")
+    still = [p for p in named if calqc[p]["verdict"] == "punished"]
+    lost = [p for p in named if calqc[p]["verdict"] != "punished"]
+    text = f"Under calibrated noise {len(still)} of the {len(named)} named mistakes are still punished."
+    if lost:
+        text += (" The reward can no longer tell the reference from: "
+                 + "; ".join(f"{PHRASES[p]} (gap {calqc[p]['gap']:+.3f}, SE {calqc[p]['se']:.3f}"
+                             + (", the mistake scores higher" if calqc[p]["verdict"] == "inverted" else "") + ")"
+                             for p in lost) + ".")
+    d["real_card_verdicts_bullet"] = bullet(text)
+    sens = {r["shared_fraction"]: r for r in real["shared_fraction_sensitivity"]}
+    d["real_share_bullet"] = bullet(
+        f"Two things in the calibrated profile are assumptions, not measurements. First, half of the added noise "
+        f"is shared by the clocks of one modality in a sample. That choice matters: using one clock alone loses "
+        f"{sens[0.0]['one_clock']['gap']:.2f} if none of the noise is shared, {sens[0.5]['one_clock']['gap']:.2f} at "
+        f"one half and {sens[1.0]['one_clock']['gap']:.2f} if all of it is (600 seeds, SE about "
+        f"{sens[0.5]['one_clock']['se']:.2f}). Second, the two methylation clocks, for which [1] has no data, get "
+        "the mean target of the four chronological proteomic clocks.")
+
     def token(m):
         kind, *args = m.group(1).split(":")
         if kind == "TABLE":

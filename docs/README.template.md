@@ -4,11 +4,13 @@ A simulated RL environment for one question: did this intervention make simulate
 biologically younger, or did it only move the clocks?
 
 **Status: v0.1, simulation only.** Nothing here is trained on real data. The repo holds no real
-proteomic or methylation data, no published clock, no trial data and no stored model or agent.
-Two kinds of things are fitted, both at run time and both on simulated data only: the eight
-small ridge regressions that serve as clocks, and the two small learned policies of the
-shortcut check near the end. Every number is an assumed default
-([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
+proteomic or methylation data, no published clock, no participant-level trial data and no
+stored model or agent. Two kinds of things are fitted, both at run time and both on simulated
+data only: the eight small ridge regressions that serve as clocks, and the two small learned
+policies of the shortcut check near the end. The only real numbers are a few aggregate
+statistics computed from the open supplementary tables of [1]. They are used in one section,
+to check the simulator's noise and to set one optional noise profile. Every other number is an
+assumed default ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
 [drugdev-gym](https://github.com/di-omics/drugdev-gym): hidden truth, named mistakes, and a QC
 card that says what the reward can and cannot see.
 
@@ -215,6 +217,25 @@ Seeds are public, and the task text alone (compound code, dose level, cohort) is
 identify most development seeds. Treat seeds 0 to <<d:last_seed>> as a development set, and
 score a trained agent on seeds drawn at evaluation time from a range too large to enumerate.
 
+## How far is the simulator from real clock readouts?
+
+The supplementary tables of [1] are public (the article is open access, CC BY 4.0). They list
+clock predictions for 168 samples with no participant, arm or visit label, and summary
+statistics for every arm and visit. A few aggregates were computed from them with
+[tools/real_targets.py](tools/real_targets.py). No participant-level data is in this repo, and
+the samples were not linked back to participants. The full comparison is in
+[results/real_check.md](results/real_check.md). It compares noise and agreement between clocks
+only, and says nothing about any drug.
+
+<<d:real_quiet_bullet>>
+<<d:real_corr_bullet>>
+<<d:real_card_bullet>>
+<<d:real_card_verdicts_bullet>>
+<<d:real_share_bullet>>
+
+Every other section of this README uses the default noise. Read those results as statements
+about the logic of reading a panel of clocks, not about how large a real trial has to be.
+
 ## Run it
 
 Needs Python 3.11 or newer.
@@ -229,6 +250,8 @@ longevity-gym seedcheck                   # the same after refitting with other 
 longevity-gym readouts                    # clocks vs truth
 longevity-gym qc --out results            # the QC card, several minutes
 longevity-gym shortcut --out results      # the memorising check, several minutes
+longevity-gym realcheck --out results     # simulator noise against real clock readouts
+longevity-gym qc --noise calibrated --out results   # the QC card under real-world noise
 python tools/build_readme.py              # rebuild this README from results/
 ```
 
@@ -258,6 +281,8 @@ and rebuild this README; a test fails if the README no longer matches results/.
 - The reference analysis leans on one assumption: that blood methylation does not see fibrosis
   activity at all. If it did, checking one modality against the other would protect less.
   Nothing here tests that assumption, and [1] had no second modality to check against.
+- The default noise is several times lower than that of real clocks, and the simulated clocks
+  agree with each other far more than real ones do (see the section on real clock readouts).
 - A score on this version does not separate reading the clocks from knowing this simulator's
   task mix (eight archetypes, one potency range). The off-range column of the shortcut table
   is a first step; a held-out archetype is needed as well.

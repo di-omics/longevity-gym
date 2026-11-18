@@ -1,0 +1,539 @@
+{
+ "env": "clock_trial",
+ "noise": "calibrated",
+ "n_seeds": 2000,
+ "first_seed": 0,
+ "task_mix": {
+  "true_effect_exactly_zero": 0.4455,
+  "geroprotective": 0.3865
+ },
+ "rows": [
+  {
+   "policy": "reference",
+   "mean": 0.740329357494237,
+   "median_abs_error_years": 0.24261040178171855,
+   "call_accuracy": 0.8195,
+   "changes": ""
+  },
+  {
+   "policy": "no_placebo",
+   "mean": 0.5997274326542181,
+   "median_abs_error_years": 0.5053849440465167,
+   "call_accuracy": 0.6755,
+   "changes": "pre/post change in the treated arm only, minus calendar time",
+   "gap": 0.1406019248400189,
+   "se": 0.008830093464523618,
+   "win_rate": 0.5065,
+   "verdict": "punished"
+  },
+  {
+   "policy": "plates_by_arm",
+   "mean": 0.5712971628104889,
+   "median_abs_error_years": 0.5684050646680447,
+   "call_accuracy": 0.6655,
+   "changes": "follow-up samples of each arm run on their own plate",
+   "gap": 0.16903219468374817,
+   "se": 0.008810862492177437,
+   "win_rate": 0.66525,
+   "verdict": "punished"
+  },
+  {
+   "policy": "ignore_plate",
+   "mean": 0.7304466207235136,
+   "median_abs_error_years": 0.253,
+   "call_accuracy": 0.812,
+   "changes": "leave the follow-up plate out of the analysis",
+   "gap": 0.00988273677072345,
+   "se": 0.003644892298159945,
+   "win_rate": 0.53125,
+   "verdict": "blind"
+  },
+  {
+   "policy": "short_trial_4wk",
+   "mean": 0.6298844945268566,
+   "median_abs_error_years": 0.31937650691003605,
+   "call_accuracy": 0.679,
+   "changes": "stop at 4 weeks and report it as the 26-week effect",
+   "gap": 0.11044486296738057,
+   "se": 0.006147105874419492,
+   "win_rate": 0.58975,
+   "verdict": "punished"
+  },
+  {
+   "policy": "small_n_12",
+   "mean": 0.6934405123441781,
+   "median_abs_error_years": 0.315,
+   "call_accuracy": 0.7625,
+   "changes": "12 per arm instead of 30",
+   "gap": 0.046888845150058985,
+   "se": 0.00703736428229994,
+   "win_rate": 0.3985,
+   "verdict": "punished"
+  },
+  {
+   "policy": "no_covariates",
+   "mean": 0.7304667712719067,
+   "median_abs_error_years": 0.24859513791018858,
+   "call_accuracy": 0.8045,
+   "changes": "do not measure cell mix and inflammation, so known leaks stay in",
+   "gap": 0.009862586222330277,
+   "se": 0.0032033239524472037,
+   "win_rate": 0.491,
+   "verdict": "punished"
+  },
+  {
+   "policy": "raw_clock_changes",
+   "mean": 0.738865682465543,
+   "median_abs_error_years": 0.23128936680572523,
+   "call_accuracy": 0.811,
+   "changes": "ignore the calibration cards: read raw clock changes as years of aging",
+   "gap": 0.001463675028694066,
+   "se": 0.0034157464344572266,
+   "win_rate": 0.48125,
+   "verdict": "blind"
+  },
+  {
+   "policy": "proteomics_only",
+   "mean": 0.6053130128756297,
+   "median_abs_error_years": 0.5021371831823798,
+   "call_accuracy": 0.722,
+   "changes": "one modality: the six proteomic clocks agree, so trust them",
+   "gap": 0.13501634461860748,
+   "se": 0.0070162048809015096,
+   "win_rate": 0.68925,
+   "verdict": "punished"
+  },
+  {
+   "policy": "epigenetics_only",
+   "mean": 0.6101102025387812,
+   "median_abs_error_years": 0.5145,
+   "call_accuracy": 0.7615,
+   "changes": "one modality: the two methylation clocks only",
+   "gap": 0.13021915495545586,
+   "se": 0.007037787094199099,
+   "win_rate": 0.6975,
+   "verdict": "punished"
+  },
+  {
+   "policy": "one_clock",
+   "mean": 0.5849356991120437,
+   "median_abs_error_years": 0.5655266459401476,
+   "call_accuracy": 0.716,
+   "changes": "one clock: the whole-panel chronological proteomic clock only",
+   "gap": 0.1553936583821934,
+   "se": 0.008134061419730306,
+   "win_rate": 0.7012499999999999,
+   "verdict": "punished"
+  },
+  {
+   "policy": "cherry_pick_best_clock",
+   "mean": 0.3548890417729153,
+   "median_abs_error_years": 1.179,
+   "call_accuracy": 0.4815,
+   "changes": "report whichever clock shows the biggest reversal",
+   "gap": 0.3854403157213218,
+   "se": 0.010531060396773482,
+   "win_rate": 0.796,
+   "verdict": "punished"
+  },
+  {
+   "policy": "average_all_clocks",
+   "mean": 0.6363244827028218,
+   "median_abs_error_years": 0.43288282349026985,
+   "call_accuracy": 0.7575,
+   "changes": "average all eight clocks instead of checking that modalities agree",
+   "gap": 0.1040048747914153,
+   "se": 0.007125161506338977,
+   "win_rate": 0.673,
+   "verdict": "punished"
+  },
+  {
+   "policy": "always_no",
+   "mean": 0.6311991112691127,
+   "median_abs_error_years": 0.19038264104169872,
+   "call_accuracy": 0.6135,
+   "changes": "baseline: 8 people, ignore the data, always answer no effect",
+   "gap": 0.10913024622512439,
+   "se": 0.00904835673575416,
+   "win_rate": 0.3375,
+   "verdict": "punished"
+  },
+  {
+   "policy": "always_yes",
+   "mean": 0.3716700822763202,
+   "median_abs_error_years": 1.122486918412994,
+   "call_accuracy": 0.3865,
+   "changes": "baseline: 8 people, ignore the data, always answer 1.2 years younger",
+   "gap": 0.36865927521791686,
+   "se": 0.011637008224799886,
+   "win_rate": 0.743,
+   "verdict": "punished"
+  }
+ ],
+ "mean_abs_error_by_intervention": {
+  "reference": {
+   "anti_inflammatory": 0.170663082437276,
+   "antifibrotic": 0.22751024180075347,
+   "immune_mobilizer": 0.12879150579150578,
+   "inert": 0.13384297520661156,
+   "mtor_like": 0.4271466344612918,
+   "reprogramming_like": 0.4991797766670568,
+   "restriction_like": 0.519037780672744,
+   "senolytic_like": 0.5036067496997424
+  },
+  "no_placebo": {
+   "anti_inflammatory": 0.36716129032258066,
+   "antifibrotic": 0.5669513351244855,
+   "immune_mobilizer": 0.39066023166023167,
+   "inert": 0.4576157024793388,
+   "mtor_like": 0.8212033656703972,
+   "reprogramming_like": 1.074335721678566,
+   "restriction_like": 1.007637933911023,
+   "senolytic_like": 0.9225416523711291
+  },
+  "plates_by_arm": {
+   "anti_inflammatory": 0.5146164874551971,
+   "antifibrotic": 0.5743910669319363,
+   "immune_mobilizer": 0.43955984555984556,
+   "inert": 0.4619173553719008,
+   "mtor_like": 0.9386098371401942,
+   "reprogramming_like": 1.2128643566889528,
+   "restriction_like": 1.1626088354394228,
+   "senolytic_like": 1.10474301212619
+  },
+  "ignore_plate": {
+   "anti_inflammatory": 0.18422580645161288,
+   "antifibrotic": 0.2431713673369674,
+   "immune_mobilizer": 0.1477065637065637,
+   "inert": 0.15308677685950411,
+   "mtor_like": 0.44307277583393395,
+   "reprogramming_like": 0.5120458254227231,
+   "restriction_like": 0.5491495188397603,
+   "senolytic_like": 0.526233283293255
+  },
+  "short_trial_4wk": {
+   "anti_inflammatory": 0.17063799283154124,
+   "antifibrotic": 0.21038770675681476,
+   "immune_mobilizer": 0.12879150579150578,
+   "inert": 0.13466942148760333,
+   "mtor_like": 0.6926860147097039,
+   "reprogramming_like": 0.5015372985215104,
+   "restriction_like": 1.2240229910063924,
+   "senolytic_like": 1.080687366662837
+  },
+  "small_n_12": {
+   "anti_inflammatory": 0.25438351254480285,
+   "antifibrotic": 0.2911290070897882,
+   "immune_mobilizer": 0.22883783783783787,
+   "inert": 0.2324173553719008,
+   "mtor_like": 0.6064067942443737,
+   "reprogramming_like": 0.6328385849390489,
+   "restriction_like": 0.7017212907261787,
+   "senolytic_like": 0.6995033446710691
+  },
+  "no_covariates": {
+   "anti_inflammatory": 0.17283512544802865,
+   "antifibrotic": 0.2317743105877959,
+   "immune_mobilizer": 0.1535289575289575,
+   "inert": 0.13122314049586778,
+   "mtor_like": 0.46968062997733234,
+   "reprogramming_like": 0.49861236011418286,
+   "restriction_like": 0.5122536343329267,
+   "senolytic_like": 0.47733186940331906
+  },
+  "raw_clock_changes": {
+   "anti_inflammatory": 0.146326164874552,
+   "antifibrotic": 0.20998249788551832,
+   "immune_mobilizer": 0.12288030888030889,
+   "inert": 0.11237190082644628,
+   "mtor_like": 0.45759318117064685,
+   "reprogramming_like": 0.4393856833629743,
+   "restriction_like": 0.5352946387252981,
+   "senolytic_like": 0.5045479868614619
+  },
+  "proteomics_only": {
+   "anti_inflammatory": 0.5402903225806451,
+   "antifibrotic": 1.1002903488600806,
+   "immune_mobilizer": 0.5140694980694981,
+   "inert": 0.546095041322314,
+   "mtor_like": 0.532632306564943,
+   "reprogramming_like": 0.5609449490882998,
+   "restriction_like": 0.5109362587142573,
+   "senolytic_like": 0.5949512347471433
+  },
+  "epigenetics_only": {
+   "anti_inflammatory": 0.508910394265233,
+   "antifibrotic": 0.5001193812479293,
+   "immune_mobilizer": 0.49227413127413133,
+   "inert": 0.5320495867768595,
+   "mtor_like": 0.5109673174085494,
+   "reprogramming_like": 5.266337710791162,
+   "restriction_like": 0.5447726560680551,
+   "senolytic_like": 0.5022467597305258
+  },
+  "one_clock": {
+   "anti_inflammatory": 0.6729641577060932,
+   "antifibrotic": 0.671166892200039,
+   "immune_mobilizer": 0.6305444015444015,
+   "inert": 0.6599752066115703,
+   "mtor_like": 0.6654525965458115,
+   "reprogramming_like": 0.6678599221416763,
+   "restriction_like": 0.5980074882859835,
+   "senolytic_like": 0.6935268263381051
+  },
+  "cherry_pick_best_clock": {
+   "anti_inflammatory": 1.1010967741935485,
+   "antifibrotic": 2.062836224401158,
+   "immune_mobilizer": 1.0388301158301159,
+   "inert": 1.1079545454545454,
+   "mtor_like": 1.0543139930387793,
+   "reprogramming_like": 5.60351638532211,
+   "restriction_like": 0.9649882105658985,
+   "senolytic_like": 1.093149796775542
+  },
+  "average_all_clocks": {
+   "anti_inflammatory": 0.4234444444444444,
+   "antifibrotic": 0.8370889412700592,
+   "immune_mobilizer": 0.39424710424710424,
+   "inert": 0.39192975206611574,
+   "mtor_like": 0.4284466878924853,
+   "reprogramming_like": 1.3625170368567792,
+   "restriction_like": 0.41595506180061115,
+   "senolytic_like": 0.47087977332925757
+  },
+  "always_no": {
+   "anti_inflammatory": 0.0,
+   "antifibrotic": 0.06791808594366958,
+   "immune_mobilizer": 0.0,
+   "inert": 0.0,
+   "mtor_like": 0.8691612595949794,
+   "reprogramming_like": 0.7150490155217711,
+   "restriction_like": 1.4423731169759837,
+   "senolytic_like": 1.3303956655478093
+  },
+  "always_yes": {
+   "anti_inflammatory": 1.2,
+   "antifibrotic": 1.1320819140563303,
+   "immune_mobilizer": 1.1999999999999997,
+   "inert": 1.1999999999999997,
+   "mtor_like": 0.4733111014188067,
+   "reprogramming_like": 0.567877547240826,
+   "restriction_like": 0.6654169682136407,
+   "senolytic_like": 0.6216159914898681
+  }
+ },
+ "enrolment_curve": [
+  {
+   "n_per_arm": 12,
+   "mean": 0.6934405123441781,
+   "call_accuracy": 0.7625,
+   "median_abs_error_years": 0.315,
+   "gap": 0.046888845150058985,
+   "se": 0.00703736428229994,
+   "win_rate": 0.3985,
+   "verdict": "punished"
+  },
+  {
+   "n_per_arm": 20,
+   "mean": 0.7220891551536588,
+   "call_accuracy": 0.795,
+   "median_abs_error_years": 0.2764172303532212,
+   "gap": 0.018240202340578278,
+   "se": 0.005649346016683199,
+   "win_rate": 0.3525,
+   "verdict": "punished"
+  },
+  {
+   "n_per_arm": 30,
+   "mean": 0.740329357494237,
+   "call_accuracy": 0.8195,
+   "median_abs_error_years": 0.24261040178171855,
+   "gap": 0.0,
+   "se": 0.0,
+   "win_rate": 0.5,
+   "verdict": "blind"
+  },
+  {
+   "n_per_arm": 60,
+   "mean": 0.7687479817422943,
+   "call_accuracy": 0.8625,
+   "median_abs_error_years": 0.1561792851928438,
+   "gap": -0.028418624248057335,
+   "se": 0.0055324052979576896,
+   "win_rate": 0.6175,
+   "verdict": "inverted"
+  },
+  {
+   "n_per_arm": 100,
+   "mean": 0.7736571609780613,
+   "call_accuracy": 0.8995,
+   "median_abs_error_years": 0.10640489941805198,
+   "gap": -0.033327803483824144,
+   "se": 0.006003265284953313,
+   "win_rate": 0.6035,
+   "verdict": "inverted"
+  },
+  {
+   "n_per_arm": 150,
+   "mean": 0.7518826138792081,
+   "call_accuracy": 0.9125,
+   "median_abs_error_years": 0.07699038746338623,
+   "gap": -0.011553256384970921,
+   "se": 0.006026584451472707,
+   "win_rate": 0.6255,
+   "verdict": "blind"
+  }
+ ],
+ "reference_calls_by_cell": [
+  {
+   "archetype": "anti_inflammatory",
+   "dose": 1,
+   "episodes": 102,
+   "call_accuracy": 0.9607843137254902
+  },
+  {
+   "archetype": "anti_inflammatory",
+   "dose": 2,
+   "episodes": 100,
+   "call_accuracy": 0.89
+  },
+  {
+   "archetype": "anti_inflammatory",
+   "dose": 3,
+   "episodes": 77,
+   "call_accuracy": 0.935064935064935
+  },
+  {
+   "archetype": "antifibrotic",
+   "dose": 1,
+   "episodes": 70,
+   "call_accuracy": 0.8714285714285714
+  },
+  {
+   "archetype": "antifibrotic",
+   "dose": 2,
+   "episodes": 81,
+   "call_accuracy": 0.8024691358024691
+  },
+  {
+   "archetype": "antifibrotic",
+   "dose": 3,
+   "episodes": 81,
+   "call_accuracy": 0.8888888888888888
+  },
+  {
+   "archetype": "immune_mobilizer",
+   "dose": 1,
+   "episodes": 78,
+   "call_accuracy": 0.9358974358974359
+  },
+  {
+   "archetype": "immune_mobilizer",
+   "dose": 2,
+   "episodes": 87,
+   "call_accuracy": 0.9885057471264368
+  },
+  {
+   "archetype": "immune_mobilizer",
+   "dose": 3,
+   "episodes": 94,
+   "call_accuracy": 0.9680851063829787
+  },
+  {
+   "archetype": "inert",
+   "dose": 1,
+   "episodes": 83,
+   "call_accuracy": 0.9156626506024096
+  },
+  {
+   "archetype": "inert",
+   "dose": 2,
+   "episodes": 86,
+   "call_accuracy": 0.9651162790697675
+  },
+  {
+   "archetype": "inert",
+   "dose": 3,
+   "episodes": 73,
+   "call_accuracy": 0.958904109589041
+  },
+  {
+   "archetype": "mtor_like",
+   "dose": 1,
+   "episodes": 84,
+   "call_accuracy": 0.7380952380952381
+  },
+  {
+   "archetype": "mtor_like",
+   "dose": 2,
+   "episodes": 96,
+   "call_accuracy": 0.7604166666666666
+  },
+  {
+   "archetype": "mtor_like",
+   "dose": 3,
+   "episodes": 75,
+   "call_accuracy": 0.5866666666666667
+  },
+  {
+   "archetype": "reprogramming_like",
+   "dose": 1,
+   "episodes": 83,
+   "call_accuracy": 0.5421686746987951
+  },
+  {
+   "archetype": "reprogramming_like",
+   "dose": 2,
+   "episodes": 85,
+   "call_accuracy": 0.6588235294117647
+  },
+  {
+   "archetype": "reprogramming_like",
+   "dose": 3,
+   "episodes": 69,
+   "call_accuracy": 0.7101449275362319
+  },
+  {
+   "archetype": "restriction_like",
+   "dose": 1,
+   "episodes": 91,
+   "call_accuracy": 0.5714285714285714
+  },
+  {
+   "archetype": "restriction_like",
+   "dose": 2,
+   "episodes": 65,
+   "call_accuracy": 0.7076923076923077
+  },
+  {
+   "archetype": "restriction_like",
+   "dose": 3,
+   "episodes": 89,
+   "call_accuracy": 0.8764044943820225
+  },
+  {
+   "archetype": "senolytic_like",
+   "dose": 1,
+   "episodes": 81,
+   "call_accuracy": 0.6790123456790124
+  },
+  {
+   "archetype": "senolytic_like",
+   "dose": 2,
+   "episodes": 84,
+   "call_accuracy": 0.8809523809523809
+  },
+  {
+   "archetype": "senolytic_like",
+   "dose": 3,
+   "episodes": 86,
+   "call_accuracy": 0.8023255813953488
+  }
+ ],
+ "reference_wrong_calls": {
+  "total": 361,
+  "missed_real_effects": 227,
+  "false_alarms": 134,
+  "truth_within_0.3_years_of_threshold": 163
+ }
+}

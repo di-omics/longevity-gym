@@ -108,3 +108,18 @@ than a very small one.
 under 0.2 years are rounded to exactly zero. The arm size of 30 was picked from the enrolment
 curve on the QC card's own seeds, so the card flatters it slightly. The zero band of 0.2 years
 was set by hand.
+
+## Calibrated noise profile (realcheck.py)
+
+Off by default. `make(seed, noise="calibrated")` adds noise to every clock reading so that the
+SD of one person's change between two visits equals a target taken from real clock readouts.
+
+| quantity | value |
+|---|---|
+| targets for the six proteomic clocks | 2.03, 2.61, 2.82, 3.16, 3.70 and 4.31 years: estimates for the real clocks whose recipes they imitate, computed from the open supplementary tables of README reference [1] by tools/real_targets.py |
+| how the targets were estimated | indirectly, from published Mann-Whitney statistics and group means, under a normal model with one SD per clock; 5th to 95th bootstrap percentiles are in results/real_check.md |
+| targets for the two methylation clocks | 2.65 years each, the mean of the four chronological proteomic targets. An assumption: reference [1] has no methylation data |
+| extra noise per reading | sqrt((target squared minus the default change SD squared) / 2), measured once from simulated placebo arms |
+| shared part | half of the added variance is one draw per sample and modality, shared by that modality's clocks. An assumption: the open data cannot say how correlated the real clocks' noise is |
+
+The profile changes noise only. Truth, tasks, clocks and calibration cards are the same.

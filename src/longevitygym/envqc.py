@@ -31,7 +31,7 @@ def paired(reference: np.ndarray, other: np.ndarray) -> dict:
     return {"gap": gap, "se": se, "win_rate": wins, "verdict": verdict}
 
 
-def qc_card(n_seeds: int = 2000, first_seed: int = 0) -> dict:
+def qc_card(n_seeds: int = 2000, first_seed: int = 0, noise: str = "default") -> dict:
     if n_seeds < 2:
         raise ValueError("n_seeds must be at least 2")
     seeds = range(first_seed, first_seed + n_seeds)
@@ -40,7 +40,7 @@ def qc_card(n_seeds: int = 2000, first_seed: int = 0) -> dict:
     for name, policy in POLICIES.items():
         rewards, errors, calls, ivs = [], [], [], []
         for seed in seeds:
-            reward, info = run_episode(make(seed=seed), policy)
+            reward, info = run_episode(make(seed=seed, noise=noise), policy)
             rewards.append(reward); errors.append(info["abs_error"]); calls.append(info["call_correct"])
             ivs.append(info["intervention"])
             if name == "reference":
@@ -64,7 +64,7 @@ def qc_card(n_seeds: int = 2000, first_seed: int = 0) -> dict:
         rows.append(row)
     curve = []
     for n in ENROLMENT_GRID:
-        out = [run_episode(make(seed=seed), make_policy({"n_per_arm": n})) for seed in seeds]
+        out = [run_episode(make(seed=seed, noise=noise), make_policy({"n_per_arm": n})) for seed in seeds]
         rewards = np.array([o[0] for o in out])
         curve.append({"n_per_arm": n, "mean": float(rewards.mean()),
                       "call_accuracy": float(np.mean([o[1]["call_correct"] for o in out])),
@@ -75,14 +75,15 @@ def qc_card(n_seeds: int = 2000, first_seed: int = 0) -> dict:
     truths = [make(seed=seed).truth() for seed in seeds]
     mix = {"true_effect_exactly_zero": float(np.mean([t["true_effect_years"] == 0 for t in truths])),
            "geroprotective": float(np.mean([t["geroprotective"] for t in truths]))}
-    return {"env": "clock_trial", "n_seeds": n_seeds, "first_seed": first_seed, "task_mix": mix, "rows": rows,
+    return {"env": "clock_trial", "noise": noise, "n_seeds": n_seeds, "first_seed": first_seed, "task_mix": mix, "rows": rows,
             "mean_abs_error_by_intervention": by_iv, "enrolment_curve": curve, "reference_calls_by_cell": weak,
             "reference_wrong_calls": {k: int(v) for k, v in wrong.items()}}
 
 
 def card_markdown(card: dict) -> str:
     last = card["first_seed"] + card["n_seeds"] - 1
-    out = [f"# Environment QC: {card['env']}", "",
+    profile = "" if card.get("noise", "default") == "default" else f" ({card['noise']} noise)"
+    out = [f"# Environment QC: {card['env']}{profile}", "",
            f"Seeds {card['first_seed']} to {last}; every policy sees the same hidden compound, people and noise. "
            f"In {100 * card['task_mix']['true_effect_exactly_zero']:.0f} percent of these episodes the true effect is "
            f"exactly zero and in {100 * card['task_mix']['geroprotective']:.0f} percent the compound is geroprotective.", "",

@@ -1,4 +1,4 @@
-"""longevity-gym CLI: spec | clocks | seedcheck | readouts | qc | shortcut | play."""
+"""longevity-gym CLI: spec | clocks | seedcheck | readouts | qc | shortcut | realcheck | play."""
 from __future__ import annotations
 
 import argparse
@@ -28,7 +28,11 @@ def main(argv=None):
     p.add_argument("--out", default=None, help="also write the table (md and json) into this folder")
     q = sub.add_parser("qc", help="the environment QC card")
     q.add_argument("--seeds", type=int, default=2000)
+    q.add_argument("--noise", default="default", choices=["default", "calibrated"],
+                   help="clock noise: the simulator's own, or calibrated to real clock readouts")
     q.add_argument("--out", default=None, help="also write the card (md and json) into this folder")
+    p = sub.add_parser("realcheck", help="the simulator's clock noise against real clock readouts")
+    p.add_argument("--out", default=None, help="also write the report (md and json) into this folder")
     p = sub.add_parser("play", help="run one episode with a scripted policy")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--policy", default="reference", choices=sorted(POLICIES))
@@ -49,10 +53,17 @@ def main(argv=None):
         if a.seeds < 2:
             ap.error("--seeds must be at least 2")
         from .envqc import card_markdown, qc_card
-        card = qc_card(a.seeds)
-        _emit(card_markdown(card), a.out, "qc_clock_trial.md")
+        card = qc_card(a.seeds, noise=a.noise)
+        stem = "qc_clock_trial" + ("" if a.noise == "default" else "_" + a.noise)
+        _emit(card_markdown(card), a.out, stem + ".md")
         if a.out:
-            (Path(a.out) / "qc_clock_trial.json").write_text(json.dumps(card, indent=1) + "\n")
+            (Path(a.out) / (stem + ".json")).write_text(json.dumps(card, indent=1) + "\n")
+    elif a.cmd == "realcheck":
+        from .realcheck import real_check, real_check_markdown
+        res = real_check()
+        _emit(real_check_markdown(res), a.out, "real_check.md")
+        if a.out:
+            (Path(a.out) / "real_check.json").write_text(json.dumps(res, indent=1) + "\n")
     elif a.cmd == "shortcut":
         from .shortcut import shortcut_markdown, shortcut_table
         rows = shortcut_table()

@@ -1,0 +1,306 @@
+{
+ "real": {
+  "n_samples": 168,
+  "change_sd": {
+   "ProtAge": {
+    "estimate": 2.03,
+    "boot_p05": 1.65,
+    "boot_p95": 2.25
+   },
+   "OrganAge_chrono": {
+    "estimate": 2.61,
+    "boot_p05": 2.09,
+    "boot_p95": 2.99
+   },
+   "ipfP3GPT": {
+    "estimate": 2.82,
+    "boot_p05": 2.24,
+    "boot_p95": 3.24
+   },
+   "PAOPAC": {
+    "estimate": 3.16,
+    "boot_p05": 2.54,
+    "boot_p95": 3.53
+   },
+   "OrganAge_mortality": {
+    "estimate": 3.7,
+    "boot_p05": 3.01,
+    "boot_p95": 4.12
+   },
+   "PAC": {
+    "estimate": 4.31,
+    "boot_p05": 3.48,
+    "boot_p95": 4.91
+   }
+  },
+  "sample_sd": {
+   "ProtAge": 5.05,
+   "OrganAge_chrono": 5.07,
+   "ipfP3GPT": 5.12,
+   "PAOPAC": 5.74,
+   "OrganAge_mortality": 12.5,
+   "PAC": 13.64
+  },
+  "corr": {
+   "ProtAge": {
+    "ProtAge": 1.0,
+    "OrganAge_chrono": 0.87,
+    "ipfP3GPT": 0.82,
+    "PAOPAC": 0.9,
+    "OrganAge_mortality": 0.51,
+    "PAC": 0.48
+   },
+   "OrganAge_chrono": {
+    "ProtAge": 0.87,
+    "OrganAge_chrono": 1.0,
+    "ipfP3GPT": 0.89,
+    "PAOPAC": 0.79,
+    "OrganAge_mortality": 0.27,
+    "PAC": 0.27
+   },
+   "ipfP3GPT": {
+    "ProtAge": 0.82,
+    "OrganAge_chrono": 0.89,
+    "ipfP3GPT": 1.0,
+    "PAOPAC": 0.75,
+    "OrganAge_mortality": 0.35,
+    "PAC": 0.34
+   },
+   "PAOPAC": {
+    "ProtAge": 0.9,
+    "OrganAge_chrono": 0.79,
+    "ipfP3GPT": 0.75,
+    "PAOPAC": 1.0,
+    "OrganAge_mortality": 0.55,
+    "PAC": 0.56
+   },
+   "OrganAge_mortality": {
+    "ProtAge": 0.51,
+    "OrganAge_chrono": 0.27,
+    "ipfP3GPT": 0.35,
+    "PAOPAC": 0.55,
+    "OrganAge_mortality": 1.0,
+    "PAC": 0.94
+   },
+   "PAC": {
+    "ProtAge": 0.48,
+    "OrganAge_chrono": 0.27,
+    "ipfP3GPT": 0.34,
+    "PAOPAC": 0.56,
+    "OrganAge_mortality": 0.94,
+    "PAC": 1.0
+   }
+  }
+ },
+ "analog": {
+  "prot_sparse_chrono": "ProtAge",
+  "prot_dense_chrono": "OrganAge_chrono",
+  "prot_dense_chrono_b": "ipfP3GPT",
+  "prot_organ_chrono": "PAOPAC",
+  "prot_sparse_mortality": "OrganAge_mortality",
+  "prot_age_mortality": "PAC"
+ },
+ "target_change_sd": {
+  "prot_sparse_chrono": 2.03,
+  "prot_dense_chrono": 2.61,
+  "prot_dense_chrono_b": 2.82,
+  "prot_organ_chrono": 3.16,
+  "prot_sparse_mortality": 3.7,
+  "prot_age_mortality": 4.31,
+  "epi_chrono": 2.65,
+  "epi_mortality": 2.65
+ },
+ "extra_reading_sd": {
+  "prot_sparse_chrono": 1.3423002963233734,
+  "prot_dense_chrono": 1.8193382073914233,
+  "prot_sparse_mortality": 2.431881003219508,
+  "prot_age_mortality": 2.877917706652298,
+  "prot_dense_chrono_b": 1.9706767068400668,
+  "prot_organ_chrono": 2.1702043996293496,
+  "epi_chrono": 1.8419497957659567,
+  "epi_mortality": 1.8277692289707923
+ },
+ "shared_fraction": 0.5,
+ "shared_fraction_sensitivity": [
+  {
+   "shared_fraction": 0.0,
+   "reference": 0.7966948235560778,
+   "one_clock": {
+    "gap": 0.20820677719117361,
+    "se": 0.014596140372446706
+   },
+   "proteomics_only": {
+    "gap": 0.07441377386874727,
+    "se": 0.011292079344632125
+   }
+  },
+  {
+   "shared_fraction": 0.5,
+   "reference": 0.7487336955200289,
+   "one_clock": {
+    "gap": 0.1585126063562476,
+    "se": 0.01441098855794218
+   },
+   "proteomics_only": {
+    "gap": 0.13185873588915706,
+    "se": 0.0128429754605396
+   }
+  },
+  {
+   "shared_fraction": 1.0,
+   "reference": 0.7157814114176133,
+   "one_clock": {
+    "gap": 0.12789315628755432,
+    "se": 0.01362155356267056
+   },
+   "proteomics_only": {
+    "gap": 0.15332664449078837,
+    "se": 0.013208786841116999
+   }
+  }
+ ],
+ "default": {
+  "change_sd": {
+   "prot_sparse_chrono": 0.7192772963053725,
+   "prot_dense_chrono": 0.4383115036723592,
+   "prot_sparse_mortality": 1.3645180732992,
+   "prot_age_mortality": 1.4181958071699226,
+   "prot_dense_chrono_b": 0.4304261077536746,
+   "prot_organ_chrono": 0.7523468134170778,
+   "epi_chrono": 0.4867667816886239,
+   "epi_mortality": 0.5839685704342575
+  },
+  "sample_sd": {
+   "prot_sparse_chrono": 6.65100234317934,
+   "prot_dense_chrono": 6.470767028943985,
+   "prot_sparse_mortality": 9.516740040423947,
+   "prot_age_mortality": 9.530775038709935,
+   "prot_dense_chrono_b": 6.4900169858953705,
+   "prot_organ_chrono": 6.676542497043505
+  },
+  "corr": {
+   "prot_sparse_chrono": {
+    "prot_sparse_chrono": 1.0,
+    "prot_dense_chrono": 0.9833804047626572,
+    "prot_sparse_mortality": 0.9664750792321918,
+    "prot_age_mortality": 0.9581622046479495,
+    "prot_dense_chrono_b": 0.9839615509212777,
+    "prot_organ_chrono": 0.9956967476393029
+   },
+   "prot_dense_chrono": {
+    "prot_sparse_chrono": 0.9833804047626572,
+    "prot_dense_chrono": 1.0,
+    "prot_sparse_mortality": 0.9595286875841875,
+    "prot_age_mortality": 0.9526347065765574,
+    "prot_dense_chrono_b": 0.9994186425412157,
+    "prot_organ_chrono": 0.9839929445486456
+   },
+   "prot_sparse_mortality": {
+    "prot_sparse_chrono": 0.9664750792321918,
+    "prot_dense_chrono": 0.9595286875841875,
+    "prot_sparse_mortality": 1.0,
+    "prot_age_mortality": 0.9802385016119071,
+    "prot_dense_chrono_b": 0.9597895540769189,
+    "prot_organ_chrono": 0.966716361694453
+   },
+   "prot_age_mortality": {
+    "prot_sparse_chrono": 0.9581622046479495,
+    "prot_dense_chrono": 0.9526347065765571,
+    "prot_sparse_mortality": 0.9802385016119071,
+    "prot_age_mortality": 1.0,
+    "prot_dense_chrono_b": 0.9529975906617301,
+    "prot_organ_chrono": 0.9557661311271968
+   },
+   "prot_dense_chrono_b": {
+    "prot_sparse_chrono": 0.9839615509212777,
+    "prot_dense_chrono": 0.9994186425412158,
+    "prot_sparse_mortality": 0.9597895540769189,
+    "prot_age_mortality": 0.9529975906617301,
+    "prot_dense_chrono_b": 1.0,
+    "prot_organ_chrono": 0.9845625012574518
+   },
+   "prot_organ_chrono": {
+    "prot_sparse_chrono": 0.9956967476393029,
+    "prot_dense_chrono": 0.9839929445486456,
+    "prot_sparse_mortality": 0.966716361694453,
+    "prot_age_mortality": 0.9557661311271968,
+    "prot_dense_chrono_b": 0.9845625012574518,
+    "prot_organ_chrono": 1.0
+   }
+  }
+ },
+ "calibrated": {
+  "change_sd": {
+   "prot_sparse_chrono": 2.099314200373096,
+   "prot_dense_chrono": 2.7646488941083187,
+   "prot_sparse_mortality": 3.7965041299149753,
+   "prot_age_mortality": 4.394361122330551,
+   "prot_dense_chrono_b": 2.921342536463971,
+   "prot_organ_chrono": 3.273017377429703,
+   "epi_chrono": 2.5692538462247207,
+   "epi_mortality": 2.641964834062042
+  },
+  "sample_sd": {
+   "prot_sparse_chrono": 6.843803213009771,
+   "prot_dense_chrono": 6.75873802470139,
+   "prot_sparse_mortality": 9.829521850802307,
+   "prot_age_mortality": 10.060083286288707,
+   "prot_dense_chrono_b": 6.811808079333001,
+   "prot_organ_chrono": 7.046080845832296
+  },
+  "corr": {
+   "prot_sparse_chrono": {
+    "prot_sparse_chrono": 1.0,
+    "prot_dense_chrono": 0.9536376031814506,
+    "prot_sparse_mortality": 0.9420385199060447,
+    "prot_age_mortality": 0.9293414383830325,
+    "prot_dense_chrono_b": 0.9526221287870092,
+    "prot_organ_chrono": 0.9572126024443349
+   },
+   "prot_dense_chrono": {
+    "prot_sparse_chrono": 0.9536376031814507,
+    "prot_dense_chrono": 1.0,
+    "prot_sparse_mortality": 0.9318835842865466,
+    "prot_age_mortality": 0.9217862774045824,
+    "prot_dense_chrono_b": 0.959597067209858,
+    "prot_organ_chrono": 0.9433023479678312
+   },
+   "prot_sparse_mortality": {
+    "prot_sparse_chrono": 0.9420385199060449,
+    "prot_dense_chrono": 0.9318835842865466,
+    "prot_sparse_mortality": 1.0,
+    "prot_age_mortality": 0.9432101858432759,
+    "prot_dense_chrono_b": 0.9253760479737481,
+    "prot_organ_chrono": 0.9280014414878125
+   },
+   "prot_age_mortality": {
+    "prot_sparse_chrono": 0.9293414383830325,
+    "prot_dense_chrono": 0.9217862774045824,
+    "prot_sparse_mortality": 0.9432101858432759,
+    "prot_age_mortality": 1.0,
+    "prot_dense_chrono_b": 0.9172714269171439,
+    "prot_organ_chrono": 0.9133705245841091
+   },
+   "prot_dense_chrono_b": {
+    "prot_sparse_chrono": 0.9526221287870092,
+    "prot_dense_chrono": 0.959597067209858,
+    "prot_sparse_mortality": 0.9253760479737481,
+    "prot_age_mortality": 0.9172714269171439,
+    "prot_dense_chrono_b": 1.0,
+    "prot_organ_chrono": 0.9405427990582496
+   },
+   "prot_organ_chrono": {
+    "prot_sparse_chrono": 0.9572126024443349,
+    "prot_dense_chrono": 0.9433023479678314,
+    "prot_sparse_mortality": 0.9280014414878125,
+    "prot_age_mortality": 0.9133705245841091,
+    "prot_dense_chrono_b": 0.9405427990582496,
+    "prot_organ_chrono": 1.0
+   }
+  }
+ },
+ "default_too_quiet_by": {
+  "min": 2.711580060683224,
+  "max": 6.551647191470637
+ }
+}

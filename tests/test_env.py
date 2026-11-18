@@ -119,7 +119,7 @@ def test_spec_carries_a_calibration_card_for_every_clock_but_not_its_fibrosis_re
 
 @pytest.mark.parametrize("kw", [{"seed": -1}, {"seed": 1.9}, {"seed": True}, {"dose": 4}, {"dose": 0},
                                 {"cohort": "ipf"}, {"intervention": "aspirin"}, {"potency": (1.0, float("inf"))},
-                                {"potency": 1.0}, {"potency": (0.0, 1.0)}])
+                                {"potency": 1.0}, {"potency": (0.0, 1.0)}, {"noise": "loud"}])
 def test_bad_constructor_arguments_rejected(kw):
     with pytest.raises(ValueError):
         make(**{"seed": 0, **kw})
@@ -230,6 +230,30 @@ def test_reference_beats_the_named_mistakes_on_average():
     assert reference > 0.75
     for p in ("always_no", "always_yes", "no_placebo", "plates_by_arm", "cherry_pick_best_clock", "short_trial_4wk"):
         assert reference - mean(p) > 0.1, p
+
+
+# ---------------------------------------------------------------- real-data check
+def test_calibrated_noise_matches_the_real_targets_and_changes_nothing_else():
+    from longevitygym.realcheck import ANALOG, REAL, change_sd, target_change_sd
+    default, calibrated, target = change_sd("default", range(3)), change_sd("calibrated", range(3)), target_change_sd()
+    for name in CLOCK_NAMES:
+        assert default[name] < 0.6 * target[name], name                    # the simulator's own noise is far lower
+        assert abs(calibrated[name] - target[name]) < 0.12 * target[name], name
+    for name, real in ANALOG.items():
+        assert target[name] == REAL["change_sd"][real]["estimate"]
+    plain, noisy = make(seed=4), make(seed=4, noise="calibrated")
+    assert plain.truth() == noisy.truth() and plain.code == noisy.code
+    rows = lambda env: env.step({"n_per_arm": 8})[0]["rows"]
+    a, b = rows(plain), rows(noisy)
+    assert [r["age"] for r in a] == [r["age"] for r in b] and a != b            # same people, noisier readings
+
+
+def test_repo_holds_no_participant_level_real_data():
+    from longevitygym import realcheck
+    assert realcheck.REAL["n_samples"] == 168
+    numbers = json.dumps(realcheck.REAL)
+    assert len(numbers) < 3000                                                # aggregates only
+    assert not list(ROOT.rglob("*.xlsx")) or all(".venv" in str(p) or "venv" in p.parts for p in ROOT.rglob("*.xlsx"))
 
 
 # ---------------------------------------------------------------- repo hygiene

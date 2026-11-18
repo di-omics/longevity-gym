@@ -4,11 +4,13 @@ A simulated RL environment for one question: did this intervention make simulate
 biologically younger, or did it only move the clocks?
 
 **Status: v0.1, simulation only.** Nothing here is trained on real data. The repo holds no real
-proteomic or methylation data, no published clock, no trial data and no stored model or agent.
-Two kinds of things are fitted, both at run time and both on simulated data only: the eight
-small ridge regressions that serve as clocks, and the two small learned policies of the
-shortcut check near the end. Every number is an assumed default
-([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
+proteomic or methylation data, no published clock, no participant-level trial data and no
+stored model or agent. Two kinds of things are fitted, both at run time and both on simulated
+data only: the eight small ridge regressions that serve as clocks, and the two small learned
+policies of the shortcut check near the end. The only real numbers are a few aggregate
+statistics computed from the open supplementary tables of [1]. They are used in one section,
+to check the simulator's noise and to set one optional noise profile. Every other number is an
+assumed default ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
 [drugdev-gym](https://github.com/di-omics/drugdev-gym): hidden truth, named mistakes, and a QC
 card that says what the reward can and cannot see.
 
@@ -336,6 +338,44 @@ Seeds are public, and the task text alone (compound code, dose level, cohort) is
 identify most development seeds. Treat seeds 0 to 1999 as a development set, and
 score a trained agent on seeds drawn at evaluation time from a range too large to enumerate.
 
+## How far is the simulator from real clock readouts?
+
+The supplementary tables of [1] are public (the article is open access, CC BY 4.0). They list
+clock predictions for 168 samples with no participant, arm or visit label, and summary
+statistics for every arm and visit. A few aggregates were computed from them with
+[tools/real_targets.py](tools/real_targets.py). No participant-level data is in this repo, and
+the samples were not linked back to participants. The full comparison is in
+[results/real_check.md](results/real_check.md). It compares noise and agreement between clocks
+only, and says nothing about any drug.
+
+- **The simulator is far too quiet.** For the six real clocks in that trial's patients, one
+  person's change between two visits has an SD of about 2.0 to 4.3 years. That covers everything
+  that makes two visits differ: assay noise, short-term biology and, in the treated arms,
+  differences in response. The estimate is indirect: it is backed out of the paper's published
+  test statistics. The simulator's default is 2.7 to 6.6 times smaller.
+- **Simulated clocks agree with each other far more than real ones.** Over samples, the four
+  real chronological clocks correlate 0.75 to 0.90 with each other and 0.27 to 0.56 with the two
+  mortality clocks. In the simulator those correlations are 0.98 to 1.00 and 0.95 to 0.97, and
+  calibrating the noise only brings them to 0.94 to 0.96 and 0.91 to 0.94. Real patients differ
+  along more dimensions than these simulated ones, and no noise setting fixes that.
+- **With real-world noise the task is much harder.** `make(seed, noise="calibrated")` adds
+  reading noise to every clock until its change-score SD matches the real estimate. Under it the
+  reference analysis scores 0.74 instead of 0.91 and makes the right call 82 percent of the time
+  instead of 96, at 30 per arm. At 150 per arm it makes the right call 91 percent of the time,
+  and on the enrolment grid the reward is highest at 100 per arm. The full card is in
+  [results/qc_clock_trial_calibrated.md](results/qc_clock_trial_calibrated.md).
+- Under calibrated noise 10 of the 12 named mistakes are still punished. The reward can no
+  longer tell the reference from: leaving the plate out of the analysis (gap +0.010, SE 0.004);
+  ignoring the calibration cards (gap +0.001, SE 0.003).
+- Two things in the calibrated profile are assumptions, not measurements. First, half of the
+  added noise is shared by the clocks of one modality in a sample. That choice matters: using
+  one clock alone loses 0.21 if none of the noise is shared, 0.16 at one half and 0.13 if all of
+  it is (600 seeds, SE about 0.01). Second, the two methylation clocks, for which [1] has no
+  data, get the mean target of the four chronological proteomic clocks.
+
+Every other section of this README uses the default noise. Read those results as statements
+about the logic of reading a panel of clocks, not about how large a real trial has to be.
+
 ## Run it
 
 Needs Python 3.11 or newer.
@@ -350,6 +390,8 @@ longevity-gym seedcheck                   # the same after refitting with other 
 longevity-gym readouts                    # clocks vs truth
 longevity-gym qc --out results            # the QC card, several minutes
 longevity-gym shortcut --out results      # the memorising check, several minutes
+longevity-gym realcheck --out results     # simulator noise against real clock readouts
+longevity-gym qc --noise calibrated --out results   # the QC card under real-world noise
 python tools/build_readme.py              # rebuild this README from results/
 ```
 
@@ -379,6 +421,8 @@ and rebuild this README; a test fails if the README no longer matches results/.
 - The reference analysis leans on one assumption: that blood methylation does not see fibrosis
   activity at all. If it did, checking one modality against the other would protect less.
   Nothing here tests that assumption, and [1] had no second modality to check against.
+- The default noise is several times lower than that of real clocks, and the simulated clocks
+  agree with each other far more than real ones do (see the section on real clock readouts).
 - A score on this version does not separate reading the clocks from knowing this simulator's
   task mix (eight archetypes, one potency range). The off-range column of the shortcut table
   is a first step; a held-out archetype is needed as well.

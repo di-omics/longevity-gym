@@ -27,6 +27,7 @@ COHORTS = {"fibrosis": "adults 45 to 80 with fibrotic lung disease", "healthy": 
 DESIGN_DEFAULTS = {"n_per_arm": 40, "placebo": True, "weeks": 26, "plate_layout": "randomized",
                    "measure_covariates": False, "clocks": list(CLOCK_NAMES)}
 REPORT_KEYS = ("effect_years", "geroprotective")
+NOISE_PROFILES = ("default", "calibrated")
 
 
 def _is_int(v) -> bool:
@@ -37,7 +38,12 @@ class ClockTrialEnv:
     name = "clock_trial"
 
     def __init__(self, seed: int = 0, intervention: str | None = None, cohort: str | None = None,
-                 dose: int | None = None, potency: tuple | None = None):
+                 dose: int | None = None, potency: tuple | None = None, noise: str = "default"):
+        """noise: "default" (the simulator's own assumed noise) or "calibrated" (extra reading noise
+        on every clock, sized from real clock readouts; see realcheck.py)."""
+        if noise not in NOISE_PROFILES:
+            raise ValueError(f"noise must be one of {NOISE_PROFILES}")
+        self.noise = noise
         if not (_is_int(seed) and seed >= 0):
             raise ValueError("seed must be a non-negative int")
         self.seed = int(seed)
@@ -167,6 +173,8 @@ class ClockTrialEnv:
             xm1 = methylome(c1, rng, cpg_plate[plate1], epi_direct=resp * eff["epi_direct"])
             r0 = read_clocks(xp0, xm0, c0.chrono, d["clocks"])
             r1 = read_clocks(xp1, xm1, c1.chrono, d["clocks"])
+            if self.noise == "calibrated":
+                self._add_reading_noise((r0, r1), k, m)
             cov0 = {"lymphoid_z": c0.mix + cov_noise[0], "crp_z": c0.inflam + cov_noise[1]}
             cov1 = {"lymphoid_z": c1.mix + cov_noise[2], "crp_z": c1.inflam + cov_noise[3]}
             for i in range(n):
@@ -180,6 +188,19 @@ class ClockTrialEnv:
         self._stage = "report"
         return {"stage": "report", "weeks": w, "rows": rows,
                 "note": "clock values are predicted ages in years; covariates are in reference SD units"}, 0.0, False, {}
+
+    def _add_reading_noise(self, visits, arm_index: int, m: int) -> None:
+        """Calibrated profile only. A separate random stream, drawn for every clock in a fixed order,
+        so the default profile is untouched and clock menus stay comparable."""
+        from .realcheck import SHARED_FRACTION, calibrated_extra_sd
+        extra = calibrated_extra_sd()
+        rng = np.random.default_rng([self.seed, 6, arm_index])
+        shared = {family: rng.normal(0, 1, (2, m)) for family in ("proteomic", "epigenetic")}
+        own = {name: rng.normal(0, 1, (2, m)) for name in CLOCK_NAMES}
+        for visit, readings in enumerate(visits):
+            for name in readings:
+                mix = SHARED_FRACTION ** 0.5 * shared[clocks()[name].family][visit] + (1 - SHARED_FRACTION) ** 0.5 * own[name][visit]
+                readings[name] = readings[name] + extra[name] * mix
 
     def truth(self) -> dict:
         iv = self.intervention
