@@ -1,9 +1,9 @@
 """interventions.py: what each archetype does to the clocks, next to the simulated truth."""
 import numpy as np
 
-from longevitygym import make
-from longevitygym.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC
-from longevitygym.policies import REFERENCE_DESIGN, clock_effect
+from longevityrl import make
+from longevityrl.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC
+from longevityrl.policies import REFERENCE_DESIGN, clock_effect
 
 
 def _trial(intervention, cohort, seeds=(3, 4, 5, 6), dose=2, n=150):

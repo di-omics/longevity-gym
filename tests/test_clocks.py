@@ -1,8 +1,8 @@
 """clocks.py: the eight simulated clocks and what each one reads."""
 import numpy as np
 
-from longevitygym.biology import KIND_SHARED, PANEL
-from longevitygym.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clock_table, clocks
+from longevityrl.biology import KIND_SHARED, PANEL
+from longevityrl.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clock_table, clocks
 
 
 def test_eight_clocks_six_proteomic_two_methylation():
@@ -28,7 +28,7 @@ def test_every_proteomic_clock_uses_a_shared_protein_and_reads_fibrosis_as_age()
 
 
 def test_whole_panel_clocks_discount_fibrosis_because_a_few_training_people_had_it():
-    from longevitygym.clocks import train_clocks
+    from longevityrl.clocks import train_clocks
     shipped = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table()}
     healthy = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table(train_clocks(population="none"))}
     for name in ("prot_dense_chrono", "prot_dense_chrono_b"):

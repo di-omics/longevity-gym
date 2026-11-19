@@ -1,4 +1,4 @@
-"""Recompute the real-data aggregates used by longevitygym/realcheck.py.
+"""Recompute the real-data aggregates used by longevityrl/realcheck.py.
 
 Input: the supplementary tables workbook of reference [1] in the README (an open access article, CC BY 4.0),
 file 41587_2026_3286_MOESM3_ESM.xlsx from the article's "Supplementary information" section.

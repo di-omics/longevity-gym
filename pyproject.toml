@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "longevity-gym"
+name = "longevity-rl"
 version = "0.1.0"
 description = "Synthetic benchmarks for few-shot batch selection and aging-clock interpretation"
 readme = "README.md"
@@ -19,11 +19,10 @@ Repository = "https://github.com/di-omics/longevity-rl"
 dev = ["pytest>=8"]
 
 [project.scripts]
-longevity-rl = "longevitygym.cli:main"
-longevity-gym = "longevitygym.cli:main"
+longevity-rl = "longevityrl.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/longevitygym"]
+packages = ["src/longevityrl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

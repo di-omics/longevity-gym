@@ -4,10 +4,10 @@ import json
 import numpy as np
 import pytest
 
-from longevitygym import ClockTrialEnv, make
-from longevitygym.benchmark import run_benchmark
-from longevitygym.cli import main
-from longevitygym.policies import POLICIES, REFERENCE_DESIGN
+from longevityrl import ClockTrialEnv, make
+from longevityrl.benchmark import run_benchmark
+from longevityrl.cli import main
+from longevityrl.policies import POLICIES, REFERENCE_DESIGN
 
 
 @pytest.mark.parametrize("noise", ["default", "calibrated"])

@@ -1,10 +1,10 @@
 """realcheck.py: the calibrated noise profile against the real aggregate targets."""
-from longevitygym import make
-from longevitygym.clocks import CLOCK_NAMES
+from longevityrl import make
+from longevityrl.clocks import CLOCK_NAMES
 
 
 def test_calibrated_noise_matches_the_real_targets_and_changes_nothing_else():
-    from longevitygym.realcheck import ANALOG, REAL, change_sd, target_change_sd
+    from longevityrl.realcheck import ANALOG, REAL, change_sd, target_change_sd
     default, calibrated, target = change_sd("default", range(3)), change_sd("calibrated", range(3)), target_change_sd()
     for name in CLOCK_NAMES:
         assert default[name] < 0.6 * target[name], name                    # the simulator's own noise is far lower

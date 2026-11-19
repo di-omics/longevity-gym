@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_repo_holds_no_participant_level_real_data():
-    from longevitygym import realcheck
+    from longevityrl import realcheck
     assert realcheck.REAL["n_samples"] == 168
     numbers = json.dumps(realcheck.REAL)
     assert len(numbers) < 3000                                                # aggregates only

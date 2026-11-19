@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from longevitygym.cli import main
-from longevitygym.replay import run_replay
+from longevityrl.cli import main
+from longevityrl.replay import run_replay
 
 
 def test_policies_share_a_start_and_each_spend_the_same_budget():

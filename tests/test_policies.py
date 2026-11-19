@@ -1,8 +1,8 @@
 """policies.py: the scripted reference against the named mistakes."""
 import numpy as np
 
-from longevitygym import make
-from longevitygym.policies import POLICIES, run_episode
+from longevityrl import make
+from longevityrl.policies import POLICIES, run_episode
 
 
 def test_reference_beats_the_named_mistakes_on_average():

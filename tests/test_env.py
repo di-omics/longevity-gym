@@ -5,10 +5,10 @@ import math
 import numpy as np
 import pytest
 
-from longevitygym import make
-from longevitygym.clocks import CLOCK_NAMES, clock_cards, clock_table
-from longevitygym.interventions import INTERVENTIONS, POTENCY_RANGE
-from longevitygym.policies import POLICIES, run_episode
+from longevityrl import make
+from longevityrl.clocks import CLOCK_NAMES, clock_cards, clock_table
+from longevityrl.interventions import INTERVENTIONS, POTENCY_RANGE
+from longevityrl.policies import POLICIES, run_episode
 
 REAL_NAMES = ("ProtAge", "OrganAge", "PAC", "P3GPT", "PAOPAC", "Insilico", "rentosertib")
 

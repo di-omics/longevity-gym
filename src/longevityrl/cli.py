@@ -42,7 +42,7 @@ def _replay(args) -> None:
 
 def main(argv=None):
     from .policies import POLICIES
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(prog="longevity-rl", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("spec", help="the task as an agent sees it")
     b = sub.add_parser("benchmark", help="compare estimates of aging effects on held-out simulated trials")

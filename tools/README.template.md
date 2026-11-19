@@ -55,21 +55,18 @@ longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0
 longevity-rl benchmark --noise calibrated --json
 ```
 
-Existing scripts can continue to use the `longevity-gym` command and the
-`longevitygym` Python import.
-
 ## Where things are
 
 | I want to | Look here |
 |---|---|
-| see the task as an agent sees it, or run one episode | `longevity-gym spec`, `longevity-gym play --seed 3`, [env.py](src/longevitygym/env.py) |
-| read how the simulated people and their omics are made | [biology.py](src/longevitygym/biology.py) |
-| read how the clocks are fitted and what each one reads | [clocks.py](src/longevitygym/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |
-| see what each archetype does to each clock, next to the truth | [interventions.py](src/longevitygym/interventions.py), [readouts.py](src/longevitygym/readouts.py), [results/readouts.md](results/readouts.md) |
-| read the scripted reference analysis and the named mistakes | [policies.py](src/longevitygym/policies.py) |
-| read the QC card | [envqc.py](src/longevitygym/envqc.py), [results/qc_clock_trial.md](results/qc_clock_trial.md) |
-| check whether a memorising policy beats the reference | [shortcut.py](src/longevitygym/shortcut.py), [results/shortcut.md](results/shortcut.md) |
-| compare the simulator's noise with real clock readouts | [realcheck.py](src/longevitygym/realcheck.py), [tools/real_targets.py](tools/real_targets.py), [results/real_check.md](results/real_check.md) |
+| see the task as an agent sees it, or run one episode | `longevity-rl spec`, `longevity-rl play --seed 3`, [env.py](src/longevityrl/env.py) |
+| read how the simulated people and their omics are made | [biology.py](src/longevityrl/biology.py) |
+| read how the clocks are fitted and what each one reads | [clocks.py](src/longevityrl/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |
+| see what each archetype does to each clock, next to the truth | [interventions.py](src/longevityrl/interventions.py), [readouts.py](src/longevityrl/readouts.py), [results/readouts.md](results/readouts.md) |
+| read the scripted reference analysis and the named mistakes | [policies.py](src/longevityrl/policies.py) |
+| read the QC card | [envqc.py](src/longevityrl/envqc.py), [results/qc_clock_trial.md](results/qc_clock_trial.md) |
+| check whether a memorising policy beats the reference | [shortcut.py](src/longevityrl/shortcut.py), [results/shortcut.md](results/shortcut.md) |
+| compare the simulator's noise with real clock readouts | [realcheck.py](src/longevityrl/realcheck.py), [tools/real_targets.py](tools/real_targets.py), [results/real_check.md](results/real_check.md) |
 | find an assumed number and the module that holds it | [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) |
 | find the command that writes each results file | [results/README.md](results/README.md) |
 | change this README | [tools/README.template.md](tools/README.template.md), then [tools/build_readme.py](tools/build_readme.py) |
@@ -80,26 +77,27 @@ template, not README.md.
 
 ## Run it
 
-Needs Python 3.11 or newer.
+Needs Python 3.11 or newer. Until 19 November 2026 this repo was named longevity-gym: the command
+is now `longevity-rl` and the Python import is `longevityrl`.
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
-longevity-gym spec                        # the task as an agent sees it
-longevity-gym play --seed 3               # one episode with the scripted reference
-longevity-gym clocks                      # the clock table (add --out results to save it)
-longevity-gym seedcheck                   # the same after refitting with other seeds
-longevity-gym readouts                    # clocks vs truth
-longevity-gym qc --out results            # the QC card, several minutes
-longevity-gym shortcut --out results      # the memorising check, several minutes
-longevity-gym realcheck --out results     # simulator noise against real clock readouts
-longevity-gym qc --noise calibrated --out results   # the QC card under real-world noise
-python -m longevitygym spec               # the same CLI without the console script
+longevity-rl spec                         # the task as an agent sees it
+longevity-rl play --seed 3                # one episode with the scripted reference
+longevity-rl clocks                       # the clock table (add --out results to save it)
+longevity-rl seedcheck                    # the same after refitting with other seeds
+longevity-rl readouts                     # clocks vs truth
+longevity-rl qc --out results             # the QC card, several minutes
+longevity-rl shortcut --out results       # the memorising check, several minutes
+longevity-rl realcheck --out results      # simulator noise against real clock readouts
+longevity-rl qc --noise calibrated --out results    # the QC card under real-world noise
+python -m longevityrl spec                # the same CLI without the console script
 python tools/build_readme.py              # rebuild this README from results/
 ```
 
 ```python
-from longevitygym import make
+from longevityrl import make
 env = make(seed=0)
 task = env.reset()
 obs, _, _, _ = env.step({"n_per_arm": 30, "placebo": True, "weeks": 26})
@@ -138,7 +136,7 @@ reads a panel of clocks, and so that the reward can be checked before anyone sca
 
 ## How it works
 
-1. **People** ([biology.py](src/longevitygym/biology.py)). Each simulated person has seven
+1. **People** ([biology.py](src/longevityrl/biology.py)). Each simulated person has seven
    organ ages, systemic inflammation, fibrosis activity and a blood cell mix. Biological age is
    defined as the mean organ age. Inflammation, fibrosis activity and cell mix leak into the
    omics but, by this definition, are not aging.
@@ -149,23 +147,23 @@ reads a panel of clocks, and so that the reward can be checked before anyone sca
    fibrosis-related feature reported in [1]. Fibrosis activity also nudges every other
    organ-enriched protein in its own "older" direction, so in this toy world the disease looks
    like aging across the proteome.
-3. **Clocks** ([clocks.py](src/longevitygym/clocks.py)). Eight ridge regressions fitted to
+3. **Clocks** ([clocks.py](src/longevityrl/clocks.py)). Eight ridge regressions fitted to
    simulated people. Six imitate the training recipes of the six clocks in [1] as far as a
    small linear model can. Two methylation clocks are this repo's addition; the study in [1]
    used proteomic clocks only. Each clock comes with a calibration card: how far its reading
    moves per year of true organ aging and per unit of two measurable covariates, in healthy
    people. How a clock reads disease is not on its card.
-4. **Interventions** ([interventions.py](src/longevitygym/interventions.py)). Eight abstract
+4. **Interventions** ([interventions.py](src/longevityrl/interventions.py)). Eight abstract
    archetypes at three dose levels, each with two hidden potency multipliers (0.25 to 1.75), so
    the true effect is a continuous number. Some are coded to change organ aging. Some only
    change what leaks into a clock. The agent sees a code name, never the mechanism.
-5. **Environment** ([env.py](src/longevitygym/env.py)). `clock_trial`, two steps: design a
+5. **Environment** ([env.py](src/longevityrl/env.py)). `clock_trial`, two steps: design a
    trial (arm size, placebo, duration, plate layout, covariates, which clocks), receive
    per-sample clock readings, then report the effect in years at 26 weeks. The report also
    carries a yes or no on geroprotective (half a year or more younger), which must agree with
    the number. Reward = half for the estimate, half for the call, minus enrolment cost. One env
    object is one episode.
-6. **Environment QC** ([envqc.py](src/longevitygym/envqc.py)). A scripted reference analysis,
+6. **Environment QC** ([envqc.py](src/longevityrl/envqc.py)). A scripted reference analysis,
    twelve named mistakes that each change one thing, and two constant-answer baselines, all run
    on the same seeds, people and noise.
 
@@ -305,7 +303,7 @@ What the card says:
 <<TABLE:shortcut>>
 
 Two learned policies, refitted on every run from 2,400 episodes with only what an agent
-legitimately gets ([shortcut.py](src/longevitygym/shortcut.py)):
+legitimately gets ([shortcut.py](src/longevityrl/shortcut.py)):
 
 <<d:memoriser_bullet>>
 <<d:learner_bullet>>
