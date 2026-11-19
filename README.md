@@ -59,6 +59,8 @@ longevity-rl benchmark --noise calibrated --json
 
 | I want to | Look here |
 |---|---|
+| compare batch-selection policies on the same synthetic pool | `longevity-rl replay --seed 17`, [replay.py](src/longevityrl/replay.py) |
+| compare ways to interpret the same simulated clock trial | `longevity-rl benchmark`, [benchmark.py](src/longevityrl/benchmark.py) |
 | see the task as an agent sees it, or run one episode | `longevity-rl spec`, `longevity-rl play --seed 3`, [env.py](src/longevityrl/env.py) |
 | read how the simulated people and their omics are made | [biology.py](src/longevityrl/biology.py) |
 | read how the clocks are fitted and what each one reads | [clocks.py](src/longevityrl/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |
@@ -70,7 +72,7 @@ longevity-rl benchmark --noise calibrated --json
 | find an assumed number and the module that holds it | [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) |
 | find the command that writes each results file | [results/README.md](results/README.md) |
 | change this README | [tools/README.template.md](tools/README.template.md), then [tools/build_readme.py](tools/build_readme.py) |
-| read or run the tests | `pytest -q`; [tests/](tests) has one file each for clocks, env, interventions, policies and realcheck, plus test_repo.py for the repo's own rules |
+| read or run the tests | `pytest -q`; [tests/](tests) has one file each for benchmark, clocks, env, interventions, policies, realcheck and replay, plus test_repo.py for the repo's own rules |
 
 This README is generated from [tools/README.template.md](tools/README.template.md). Edit the
 template, not README.md.
@@ -491,8 +493,9 @@ about the logic of reading a panel of clocks, not about how large a real trial h
   is a first step; a held-out archetype is needed as well.
 - The reference analysis and the list of mistakes are a first draft, and no one outside has
   reviewed them.
-- One environment, one disease cohort, two modalities. Next: transcriptomic and blood
-  chemistry clocks, a layer that replays real public clock readouts, and an LLM-agent harness.
+- One clock-trial environment, one disease cohort, two modalities. Next: transcriptomic and
+  blood chemistry clocks, a layer that replays real public clock readouts, and an LLM-agent
+  harness.
 
 ## Licence
 
