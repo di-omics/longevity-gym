@@ -30,7 +30,7 @@ card that says what the reward can and cannot see.
 | find an assumed number and the module that holds it | [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) |
 | find the command that writes each results file | [results/README.md](results/README.md) |
 | change this README | [tools/README.template.md](tools/README.template.md), then [tools/build_readme.py](tools/build_readme.py) |
-| find the test for a module | [tests/](tests): one file per module, plus test_repo.py for the repo's own rules |
+| read or run the tests | `pytest -q`; [tests/](tests) has one file each for clocks, env, interventions, policies and realcheck, plus test_repo.py for the repo's own rules |
 
 This README is generated from [tools/README.template.md](tools/README.template.md). Edit the
 template, not README.md.
