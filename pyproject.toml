@@ -9,6 +9,7 @@ description = "A simulated RL environment: did the intervention make simulated p
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Di Hu"}]
+license = "MIT"
 dependencies = ["numpy>=1.26"]
 
 [project.urls]

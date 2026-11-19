@@ -312,7 +312,10 @@ about the logic of reading a panel of clocks, not about how large a real trial h
   reviewed them.
 - One environment, one disease cohort, two modalities. Next: transcriptomic and blood
   chemistry clocks, a layer that replays real public clock readouts, and an LLM-agent harness.
-- No licence has been chosen yet, so for now all rights are reserved.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
 
 ## References
 
