@@ -1,5 +1,6 @@
 {
  "env": "clock_trial",
+ "noise": "default",
  "n_seeds": 2000,
  "first_seed": 0,
  "task_mix": {
