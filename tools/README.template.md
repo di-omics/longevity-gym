@@ -1,3 +1,4 @@
+<!-- README.md is generated from tools/README.template.md by tools/build_readme.py. Edit the template, then rebuild. -->
 # longevity-gym
 
 A simulated RL environment for one question: did this intervention make simulated people
@@ -13,6 +14,61 @@ to check the simulator's noise and to set one optional noise profile. Every othe
 assumed default ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
 [drugdev-gym](https://github.com/di-omics/drugdev-gym): hidden truth, named mistakes, and a QC
 card that says what the reward can and cannot see.
+
+## Where things are
+
+| I want to | Look here |
+|---|---|
+| see the task as an agent sees it, or run one episode | `longevity-gym spec`, `longevity-gym play --seed 3`, [env.py](src/longevitygym/env.py) |
+| read how the simulated people and their omics are made | [biology.py](src/longevitygym/biology.py) |
+| read how the clocks are fitted and what each one reads | [clocks.py](src/longevitygym/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |
+| see what each archetype does to each clock, next to the truth | [interventions.py](src/longevitygym/interventions.py), [readouts.py](src/longevitygym/readouts.py), [results/readouts.md](results/readouts.md) |
+| read the scripted reference analysis and the named mistakes | [policies.py](src/longevitygym/policies.py) |
+| read the QC card | [envqc.py](src/longevitygym/envqc.py), [results/qc_clock_trial.md](results/qc_clock_trial.md) |
+| check whether a memorising policy beats the reference | [shortcut.py](src/longevitygym/shortcut.py), [results/shortcut.md](results/shortcut.md) |
+| compare the simulator's noise with real clock readouts | [realcheck.py](src/longevitygym/realcheck.py), [tools/real_targets.py](tools/real_targets.py), [results/real_check.md](results/real_check.md) |
+| find an assumed number and the module that holds it | [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) |
+| find the command that writes each results file | [results/README.md](results/README.md) |
+| change this README | [tools/README.template.md](tools/README.template.md), then [tools/build_readme.py](tools/build_readme.py) |
+| find the test for a module | [tests/](tests): one file per module, plus test_repo.py for the repo's own rules |
+
+This README is generated from [tools/README.template.md](tools/README.template.md). Edit the
+template, not README.md.
+
+## Run it
+
+Needs Python 3.11 or newer.
+
+```bash
+pip install -e ".[dev]"
+pytest -q
+longevity-gym spec                        # the task as an agent sees it
+longevity-gym play --seed 3               # one episode with the scripted reference
+longevity-gym clocks                      # the clock table (add --out results to save it)
+longevity-gym seedcheck                   # the same after refitting with other seeds
+longevity-gym readouts                    # clocks vs truth
+longevity-gym qc --out results            # the QC card, several minutes
+longevity-gym shortcut --out results      # the memorising check, several minutes
+longevity-gym realcheck --out results     # simulator noise against real clock readouts
+longevity-gym qc --noise calibrated --out results   # the QC card under real-world noise
+python -m longevitygym spec               # the same CLI without the console script
+python tools/build_readme.py              # rebuild this README from results/
+```
+
+```python
+from longevitygym import make
+env = make(seed=0)
+task = env.reset()
+obs, _, _, _ = env.step({"n_per_arm": 30, "placebo": True, "weeks": 26})
+_, reward, done, info = env.step({"effect_years": -0.3, "geroprotective": False})
+```
+
+Truth lives in the env object and is returned after the report. A harness for a real agent
+must keep the agent on the JSON side and give it a new env for every episode. Numbers here
+were generated with Python 3.12 and numpy 2 on macOS arm64; other builds can differ in the
+last digit. If a run is much slower than stated (numpy built on OpenBLAS, for example numpy
+1.26 from pip), set OPENBLAS_NUM_THREADS=1. After any change under src/, regenerate results/
+and rebuild this README; a test fails if the README no longer matches results/.
 
 ## Why
 
@@ -235,40 +291,6 @@ only, and says nothing about any drug.
 
 Every other section of this README uses the default noise. Read those results as statements
 about the logic of reading a panel of clocks, not about how large a real trial has to be.
-
-## Run it
-
-Needs Python 3.11 or newer.
-
-```bash
-pip install -e ".[dev]"
-pytest -q
-longevity-gym spec                        # the task as an agent sees it
-longevity-gym play --seed 3               # one episode with the scripted reference
-longevity-gym clocks                      # the clock table (add --out results to save it)
-longevity-gym seedcheck                   # the same after refitting with other seeds
-longevity-gym readouts                    # clocks vs truth
-longevity-gym qc --out results            # the QC card, several minutes
-longevity-gym shortcut --out results      # the memorising check, several minutes
-longevity-gym realcheck --out results     # simulator noise against real clock readouts
-longevity-gym qc --noise calibrated --out results   # the QC card under real-world noise
-python tools/build_readme.py              # rebuild this README from results/
-```
-
-```python
-from longevitygym import make
-env = make(seed=0)
-task = env.reset()
-obs, _, _, _ = env.step({"n_per_arm": 30, "placebo": True, "weeks": 26})
-_, reward, done, info = env.step({"effect_years": -0.3, "geroprotective": False})
-```
-
-Truth lives in the env object and is returned after the report. A harness for a real agent
-must keep the agent on the JSON side and give it a new env for every episode. Numbers here
-were generated with Python 3.12 and numpy 2 on macOS arm64; other builds can differ in the
-last digit. If a run is much slower than stated (numpy built on OpenBLAS, for example numpy
-1.26 from pip), set OPENBLAS_NUM_THREADS=1. After any change under src/, regenerate results/
-and rebuild this README; a test fails if the README no longer matches results/.
 
 ## Limits
 

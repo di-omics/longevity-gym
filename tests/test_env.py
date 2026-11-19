@@ -1,71 +1,16 @@
+"""env.py: what the agent sees, and that one env object is one episode."""
 import json
 import math
-import pathlib
-import subprocess
-import sys
 
 import numpy as np
 import pytest
 
 from longevitygym import make
-from longevitygym.clocks import CLOCK_NAMES, EPIGENETIC, PROTEOMIC, clock_cards, clock_table, clocks
-from longevitygym.biology import KIND_SHARED, PANEL
+from longevitygym.clocks import CLOCK_NAMES, clock_cards, clock_table
 from longevitygym.interventions import INTERVENTIONS, POTENCY_RANGE
-from longevitygym.policies import POLICIES, REFERENCE_DESIGN, clock_effect, run_episode
+from longevitygym.policies import POLICIES, run_episode
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 REAL_NAMES = ("ProtAge", "OrganAge", "PAC", "P3GPT", "PAOPAC", "Insilico", "rentosertib")
-
-
-def _trial(intervention, cohort, seeds=(3, 4, 5, 6), dose=2, n=150):
-    """Mean clock readings over a few large simulated trials at nominal potency, and the truth."""
-    per = {c: [] for c in CLOCK_NAMES}
-    for seed in seeds:
-        env = make(seed=seed, intervention=intervention, cohort=cohort, dose=dose, potency=(1.0, 1.0))
-        env.reset()
-        obs, *_ = env.step({**REFERENCE_DESIGN, "n_per_arm": n})
-        for c in CLOCK_NAMES:
-            per[c].append(clock_effect(obs["rows"], c, 26))
-    return {c: float(np.mean(v)) for c, v in per.items()}, env.truth()["true_effect_years"]
-
-
-# ---------------------------------------------------------------- clocks
-def test_eight_clocks_six_proteomic_two_methylation():
-    assert len(CLOCK_NAMES) == 8 and len(PROTEOMIC) == 6 and len(EPIGENETIC) == 2
-    targets = [clocks()[c].target for c in PROTEOMIC]
-    assert targets.count("chronological") == 4 and targets.count("mortality") == 2
-
-
-def test_clocks_track_their_targets_on_held_out_people():
-    for row in clock_table():
-        assert row["r"] > 0.85, row["clock"]
-        assert 0.6 < row["per_year_organ_aging"] < 1.3, row["clock"]
-
-
-def test_every_proteomic_clock_uses_a_shared_protein_and_reads_fibrosis_as_age():
-    shared = set(np.flatnonzero(PANEL.prot_kind == KIND_SHARED))
-    table = {r["clock"]: r for r in clock_table()}
-    for name in PROTEOMIC:
-        assert shared & set(clocks()[name].features), name
-        assert table[name]["per_unit_fibrosis"] > 0.1, name
-    for name in EPIGENETIC:
-        assert abs(table[name]["per_unit_fibrosis"]) < 0.05, name
-
-
-def test_whole_panel_clocks_discount_fibrosis_because_a_few_training_people_had_it():
-    from longevitygym.clocks import train_clocks
-    shipped = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table()}
-    healthy = {r["clock"]: r["per_unit_fibrosis"] for r in clock_table(train_clocks(population="none"))}
-    for name in ("prot_dense_chrono", "prot_dense_chrono_b"):
-        assert healthy[name] > 1.7 * shipped[name], name
-        assert shipped[name] < min(shipped[c] for c in PROTEOMIC if "dense" not in c), name
-
-
-def test_mortality_clocks_read_inflammation_and_chronological_ones_do_not():
-    table = {r["clock"]: r for r in clock_table()}
-    for name in PROTEOMIC:
-        reads = table[name]["per_sd_inflammation"]
-        assert (reads > 1.0) if clocks()[name].target == "mortality" else (abs(reads) < 0.3), name
 
 
 # ---------------------------------------------------------------- what the agent sees
@@ -193,92 +138,3 @@ def test_designs_are_compared_on_the_same_people_and_noise():
             assert row == by_arm[key]
             same_plate += 1
     assert same_plate > 30
-
-
-# ---------------------------------------------------------------- the built-in lessons
-def test_antifibrotic_moves_every_proteomic_clock_but_not_the_organs():
-    est, truth = _trial("antifibrotic", "fibrosis")
-    assert -0.2 < truth < 0
-    for name in PROTEOMIC:
-        assert est[name] < truth - 0.05, name
-    assert np.median([est[n] for n in PROTEOMIC]) < -0.5      # a proteomics-only reading calls it geroprotective
-    for name in EPIGENETIC:
-        assert abs(est[name] - truth) < 0.3, name
-    healthy, truth_h = _trial("antifibrotic", "healthy")
-    assert truth_h == 0.0 and max(abs(v) for v in healthy.values()) < 0.3
-
-
-def test_methylation_clocks_overread_reprogramming_and_proteomic_ones_do_not():
-    est, truth = _trial("reprogramming_like", "healthy")
-    for name in EPIGENETIC:
-        assert est[name] < truth - 3, name
-    for name in PROTEOMIC:
-        assert abs(est[name] - truth) < 0.4, name
-
-
-def test_cell_mix_shift_moves_only_the_chronological_methylation_clock():
-    est, truth = _trial("immune_mobilizer", "healthy")
-    assert truth == 0.0 and est["epi_chrono"] < -0.8
-    for name in PROTEOMIC:
-        assert abs(est[name]) < 0.3, name
-
-
-def test_reference_beats_the_named_mistakes_on_average():
-    seeds = range(60)
-    mean = lambda p: float(np.mean([run_episode(make(seed=s), POLICIES[p])[0] for s in seeds]))
-    reference = mean("reference")
-    assert reference > 0.75
-    for p in ("always_no", "always_yes", "no_placebo", "plates_by_arm", "cherry_pick_best_clock", "short_trial_4wk"):
-        assert reference - mean(p) > 0.1, p
-
-
-# ---------------------------------------------------------------- real-data check
-def test_calibrated_noise_matches_the_real_targets_and_changes_nothing_else():
-    from longevitygym.realcheck import ANALOG, REAL, change_sd, target_change_sd
-    default, calibrated, target = change_sd("default", range(3)), change_sd("calibrated", range(3)), target_change_sd()
-    for name in CLOCK_NAMES:
-        assert default[name] < 0.6 * target[name], name                    # the simulator's own noise is far lower
-        assert abs(calibrated[name] - target[name]) < 0.12 * target[name], name
-    for name, real in ANALOG.items():
-        assert target[name] == REAL["change_sd"][real]["estimate"]
-    plain, noisy = make(seed=4), make(seed=4, noise="calibrated")
-    assert plain.truth() == noisy.truth() and plain.code == noisy.code
-    rows = lambda env: env.step({"n_per_arm": 8})[0]["rows"]
-    a, b = rows(plain), rows(noisy)
-    assert [r["age"] for r in a] == [r["age"] for r in b] and a != b            # same people, noisier readings
-
-
-def test_repo_holds_no_participant_level_real_data():
-    from longevitygym import realcheck
-    assert realcheck.REAL["n_samples"] == 168
-    numbers = json.dumps(realcheck.REAL)
-    assert len(numbers) < 3000                                                # aggregates only
-    assert not list(ROOT.rglob("*.xlsx")) or all(".venv" in str(p) or "venv" in p.parts for p in ROOT.rglob("*.xlsx"))
-
-
-# ---------------------------------------------------------------- repo hygiene
-def _tracked_files():
-    try:
-        out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
-        files = [ROOT / line for line in out.splitlines() if line]
-        if files:
-            return files
-    except (OSError, subprocess.CalledProcessError):
-        pass
-    files = [ROOT / "README.md", ROOT / "pyproject.toml", ROOT / ".gitignore"]
-    for folder in ("src", "tests", "docs", "results", "tools", ".github"):
-        files += [p for p in (ROOT / folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts]
-    return files
-
-
-def test_repo_is_ascii_with_no_em_dashes():
-    for path in _tracked_files():
-        if path.exists() and path.suffix != ".pyc":
-            data = path.read_bytes()
-            assert all(b < 128 for b in data), path
-
-
-def test_readme_is_built_from_the_results_files():
-    out = subprocess.run([sys.executable, str(ROOT / "tools" / "build_readme.py"), "--check"],
-                         capture_output=True, text=True)
-    assert out.returncode == 0, out.stdout + out.stderr

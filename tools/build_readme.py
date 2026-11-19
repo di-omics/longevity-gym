@@ -1,4 +1,4 @@
-"""Build README.md from docs/README.template.md and the files in results/.
+"""Build README.md from tools/README.template.md and the files in results/.
 
 Every result number in the README prose is a token in the template that is filled from
 results/, and the sentences whose wording depends on a result (which mistakes are punished,
@@ -319,7 +319,7 @@ def build() -> str:
             return seed[args[0]][CLOCK_COLS[args[1]]].replace("+", "")
         raise KeyError(m.group(1))
 
-    text = re.sub(r"<<([^<>]+)>>", token, (ROOT / "docs" / "README.template.md").read_text())
+    text = re.sub(r"<<([^<>]+)>>", token, (ROOT / "tools" / "README.template.md").read_text())
     text = re.sub(r"\n{3,}", "\n\n", text)
     assert "<<" not in text and ">>" not in text
     text.encode("ascii")
