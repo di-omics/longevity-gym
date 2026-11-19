@@ -1,19 +1,62 @@
 <!-- README.md is generated from tools/README.template.md by tools/build_readme.py. Edit the template, then rebuild. -->
-# longevity-gym
+# Longevity RL
 
-A simulated RL environment for one question: did this intervention make simulated people
-biologically younger, or did it only move the clocks?
+Two simulated decision tasks for longevity research. Select candidates against two
+endpoints on a fixed assay budget. Then, in a separate clock-trial benchmark, infer
+whether a change in aging-clock readings reflects a change in simulated organ age.
 
 **Status: v0.1, simulation only.** Nothing here is trained on real data. The repo holds no real
 proteomic or methylation data, no published clock, no participant-level trial data and no
-stored model or agent. Two kinds of things are fitted, both at run time and both on simulated
-data only: the eight small ridge regressions that serve as clocks, and the two small learned
-policies of the shortcut check near the end. The only real numbers are a few aggregate
+stored model or agent. The clocks, shortcut-check policies and benchmark outcome model
+are fitted at run time on simulated data. The only real numbers are a few aggregate
 statistics computed from the open supplementary tables of [1]. They are used in one section,
 to check the simulator's noise and to set one optional noise profile. Every other number is an
 assumed default ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)). Sister repo to
 [drugdev-gym](https://github.com/di-omics/drugdev-gym): hidden truth, named mistakes, and a QC
 card that says what the reward can and cannot see.
+
+## Few-shot batch selection
+
+Can two-round lookahead find more candidates that meet two criteria on the same
+experimental budget? `longevity-rl replay` starts five policies with the same
+eight observations. Each selects 24 new candidates in each of four rounds. A hit
+passes both simulated endpoints, which stand in for potency and stability.
+
+The pool holds 1,536 anonymous items in eight groups. A separate capacity calculation
+allows 336 paired observations per batch under the assumption of two 1,536-well
+plates, one per endpoint, with 192 control wells and four wells per item per plate.
+The planner simulates possible observations before choosing a batch. It and the
+adaptive baselines update a group-level prior that matches the simulator. Each
+campaign starts fresh. This benchmark covers decisions in a toy environment, with
+no molecular sequences, wet-lab measurements or training across peptide families.
+
+```sh
+longevity-rl replay --seed 17
+longevity-rl replay --seed 0 --campaigns 100
+```
+
+The first command shows cumulative hits by round for random selection, a fixed
+ranking, an updated greedy ranking, batch Thompson sampling, and the planner.
+The second reports paired results across seeds. Add `--json` to either command.
+
+## Aging-clock benchmark
+
+`longevity-rl benchmark` compares ways to interpret the same simulated trial. Every
+policy gets the same placebo-controlled trial and clock panel. The model-based policy
+compares the two clock-family medians with those from up to eight similar training
+trials and chooses the report with the highest expected reward under those outcomes.
+The scripted reference, the all-clock average and the constant negative call get the
+same evidence. On separate test seeds the benchmark reports reward, error in years
+and accuracy in detecting the simulator's geroprotective effect. Each decision is
+a single final report about a simulated trial with a fixed design.
+
+```sh
+longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0
+longevity-rl benchmark --noise calibrated --json
+```
+
+Existing scripts can continue to use the `longevity-gym` command and the
+`longevitygym` Python import.
 
 ## Where things are
 

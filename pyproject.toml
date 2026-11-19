@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "longevity-gym"
 version = "0.1.0"
-description = "A simulated RL environment: did the intervention make simulated people younger, or only move the clocks?"
+description = "Synthetic benchmarks for few-shot batch selection and aging-clock interpretation"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Di Hu"}]
@@ -13,12 +13,13 @@ license = "MIT"
 dependencies = ["numpy>=1.26"]
 
 [project.urls]
-Repository = "https://github.com/di-omics/longevity-gym"
+Repository = "https://github.com/di-omics/longevity-rl"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
 [project.scripts]
+longevity-rl = "longevitygym.cli:main"
 longevity-gym = "longevitygym.cli:main"
 
 [tool.hatch.build.targets.wheel]
