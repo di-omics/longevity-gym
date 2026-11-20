@@ -2,9 +2,9 @@
 
 Every result number in the README prose is a token in the template that is filled from
 results/, and the sentences whose wording depends on a result (which mistakes are punished,
-what the shortcut check shows) are generated here, so the text cannot drift from the tables.
-Design constants (pool size, number of archetypes, seed counts) are written by hand in the
-template. Run after regenerating results:
+what the shortcut check shows, what the 2 benchmarks found) are generated here, so the text
+cannot drift from the tables. Design constants (pool size, number of archetypes, seed counts)
+are written by hand in the template. Run after regenerating results:
 
     python tools/build_readme.py            # rewrite README.md
     python tools/build_readme.py --check    # exit 1 if README.md is out of date
@@ -42,6 +42,7 @@ PHRASES = {
 }
 OWN_BULLET = ("proteomics_only", "epigenetics_only", "average_all_clocks", "one_clock")
 SAME = "same design as the reference"
+SE_BAR = 3  # standard errors of a paired gap before one policy is said to score lower or higher
 
 
 def tables(path: Path) -> list[list[dict]]:
@@ -77,10 +78,142 @@ def bullet(text: str) -> str:
 
 
 def judged(gap: float, se: float, win: str, lose: str, tie: str) -> str:
-    return win if gap >= 3 * se else lose if gap <= -3 * se else tie
+    return win if gap >= SE_BAR * se else lose if gap <= -SE_BAR * se else tie
+
+
+REPLAY_LABELS = {"greedy": "updated greedy ranking", "planner": "two-round lookahead",
+                 "fixed": "fixed ranking", "active": "batch Thompson sampling", "random": "random selection"}
+BENCHMARK_LABELS = {"reference": "scripted reference", "model_based": "model-based policy",
+                    "average_all_clocks": "all-clock average", "always_no": "constant negative call"}
+RESULT_COMMANDS = {
+    "replay.json": "longevity-rl replay --seed 0 --campaigns 100 --json > results/replay.json",
+    "benchmark.json": "longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0 --json "
+                      "> results/benchmark.json",
+}
+
+
+def label(name: str, labels: dict) -> str:
+    """A policy name with its plain description; an unknown name is shown bare."""
+    return f"{name} ({labels[name]})" if name in labels else name
+
+
+def sign_test(wins: int, losses: int) -> float:
+    """Exact two-sided sign test on the paired comparisons that differ (ties dropped)."""
+    n = wins + losses
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(wins, losses) + 1))
+    return min(1.0, 2 * tail / 2 ** n)
+
+
+def format_p(p: float) -> str:
+    """2 decimals from 0.01, "below 0.0001" under that, else 1 significant digit, never exponents."""
+    if p >= 0.01:
+        return f"{p:.2f}"
+    if p < 0.0001:
+        return "below 0.0001"
+    text = f"{p:.1g}"
+    assert "e" not in text, text
+    return text
+
+
+def p_phrase(p: float) -> str:
+    text = format_p(p)
+    return "p " + text if text.startswith("below") else "p = " + text
+
+
+def load_result(name: str, make):
+    """Build a README block from one results file; stop with a clear error if it is missing or short."""
+    path = RES / name
+    if not path.exists():
+        raise SystemExit(f"results/{name} is missing: run `{RESULT_COMMANDS[name]}` from the repo root")
+    data = json.loads(path.read_text())
+    try:
+        return make(data)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise SystemExit(f"results/{name} lacks a field the README needs ({type(exc).__name__}: {exc}); "
+                         f"rerun `{RESULT_COMMANDS[name]}` from the repo root") from exc
+
+
+def replay_block(rep: dict) -> str:
+    """The first results of the few-shot batch selection section, from results/replay.json."""
+    first, n = rep["first_seed"], rep["campaigns"]
+    means = rep["mean_hits"]
+    greedy, active = rep["planner_comparisons"]["greedy"], rep["planner_comparisons"]["active"]
+    intro = (f"**First results** ([results/replay.json](results/replay.json)): {n} campaigns on seeds "
+             f"{first} to {first + n - 1}, {rep['rounds'] * rep['batch_size']} new candidates per policy per "
+             "campaign.")
+    rows = ["| Policy | Mean joint hits |", "|---|---|"]
+    rows += [f"| {label(name, REPLAY_LABELS)} | {hits:.2f} |"
+             for name, hits in sorted(means.items(), key=lambda item: -item[1])]
+    w, t, l = greedy["wins"], greedy["ties"], greedy["losses"]
+    p = sign_test(w, l)
+    if w > l and p < 0.05:
+        verdict = "So far the answer is yes: the planner finds more joint hits than the greedy baseline."
+    elif l > w and p < 0.05:
+        verdict = "So far the answer is no: the planner finds fewer joint hits than the greedy baseline."
+    else:
+        verdict = ("So far the answer is no: the planner does not find more joint hits than the greedy "
+                   "baseline, and the 2 are not distinguishable in these campaigns.")
+    aw, at, al = active["wins"], active["ties"], active["losses"]
+    facts = (f"The planner averages {means['planner']:.2f} joint hits per campaign and the greedy ranking "
+             f"{means['greedy']:.2f}. Against greedy the planner wins {w} campaigns, ties {t} and loses {l}; "
+             f"on the {w + l} campaigns that differ, an exact two-sided sign test gives {p_phrase(p)}. "
+             f"Against batch Thompson sampling it wins {aw}, ties {at} and loses {al} "
+             f"({p_phrase(sign_test(aw, al))}).")
+    return (textwrap.fill(intro, width=96, break_on_hyphens=False) + "\n\n" + "\n".join(rows) + "\n\n"
+            + textwrap.fill(verdict + " " + facts, width=96, break_on_hyphens=False))
+
+
+def benchmark_block(bench: dict) -> str:
+    """The first results of the aging-clock benchmark section, from results/benchmark.json."""
+    train, test, episodes = bench["train_seeds"], bench["test_seeds"], bench["episodes"]
+    if len(episodes) != len(test):
+        raise ValueError(f"{len(episodes)} episodes for {len(test)} test seeds")
+    policies = bench["policies"]
+    model, ref = policies["model_based"], policies["reference"]
+    d, s = model["mean_paired_reward_vs_reference"], model["paired_reward_se"]
+    if s is None or not s > 0:
+        raise ValueError(f"paired_reward_se of model_based is {s!r}, not a positive number")
+    intro = (f"**First results** ([results/benchmark.json](results/benchmark.json)): the outcome model was "
+             f"fitted on seeds {train[0]} to {train[-1]}, and every policy was tested on seeds {test[0]} to "
+             f"{test[-1]}, with the {bench['noise']} noise profile.")
+    rows = ["| Policy | Mean reward | Right calls | Mean absolute error (years) | "
+            "Reward minus reference (paired) |", "|---|---|---|---|---|"]
+    for name, row in sorted(policies.items(), key=lambda item: -item[1]["mean_reward"]):
+        right = sum(bool(ep["policies"][name]["call_correct"]) for ep in episodes)
+        paired = ("" if name == "reference" else
+                  f"{row['mean_paired_reward_vs_reference']:+.3f} (SE {row['paired_reward_se']:.3f})")
+        rows.append(f"| {label(name, BENCHMARK_LABELS)} | {row['mean_reward']:.3f} | {right} of "
+                    f"{len(episodes)} | {row['mean_abs_error_years']:.3f} | {paired} |")
+    a, r, n = f"{model['mean_reward']:.3f}", f"{ref['mean_reward']:.3f}", len(episodes)
+    facts = f"{d:+.3f} (SE {s:.3f}) over {n} test trials"
+    ratio = f"{abs(d) / s:.1f}"
+    if float(ratio) >= SE_BAR:  # 2.97 would print as 3.0, which reads as being at the bar
+        ratio = f"just under {SE_BAR}"
+    under = (f"the paired difference of {facts} is {ratio} standard errors, under the bar of "
+             f"{SE_BAR} that the QC card below uses to say one policy scores lower than another.")
+    if d < 0:
+        otherwise = (f"The model-based policy does not beat the scripted reference. Its mean reward is lower, "
+                     f"{a} against {r}, but {under}")
+    elif d > 0:
+        otherwise = (f"The model-based policy is ahead of the scripted reference on mean reward, {a} against "
+                     f"{r}, but {under}")
+    else:
+        otherwise = (f"The model-based policy and the scripted reference have the same mean reward, {a}, over "
+                     f"{n} test trials.")
+    # judged() decides: the same bar and the same inclusive comparison as the QC card (envqc.py).
+    verdict = judged(d, s, f"The model-based policy scores above the scripted reference: mean reward {a} "
+                           f"against {r}, a paired difference of {facts}.",
+                     f"The model-based policy scores below the scripted reference: mean reward {a} against "
+                     f"{r}, a paired difference of {facts}.", otherwise)
+    return (textwrap.fill(intro, width=96, break_on_hyphens=False) + "\n\n" + "\n".join(rows) + "\n\n"
+            + textwrap.fill(verdict, width=96, break_on_hyphens=False))
 
 
 def build() -> str:
+    replay_results = load_result("replay.json", replay_block)
+    benchmark_results = load_result("benchmark.json", benchmark_block)
     card = json.loads((RES / "qc_clock_trial.json").read_text())
     qc = {r["policy"]: r for r in card["rows"]}
     errs = card["mean_abs_error_by_intervention"]
@@ -116,6 +249,8 @@ def build() -> str:
         "reprog_epi_lo": f"{min(abs(rd('reprogramming_like', c)) for c in EPI):.1f}",
         "reprog_epi_hi": f"{max(abs(rd('reprogramming_like', c)) for c in EPI):.1f}",
         "mix_epi": f"{abs(rd('immune_mobilizer', 'epi_chrono')):.1f}",
+        "replay_results": replay_results,
+        "benchmark_results": benchmark_results,
     }
     # What the fixed prose claims. Fail loudly if new results no longer support it.
     assert all(rd("antifibrotic", c) < rd("antifibrotic", "TRUTH") < 0 for c in PROTEOMIC)

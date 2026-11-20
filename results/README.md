@@ -1,8 +1,10 @@
 # results/
 
-Every file here is written by one `longevity-rl` subcommand run with `--out results`. Nothing
-in this folder is edited by hand, and [README.md](../README.md) is rebuilt from it by
-[tools/build_readme.py](../tools/build_readme.py). A test fails if the two disagree.
+Every file here is written by one `longevity-rl` subcommand: most by a run with `--out results`,
+and `replay.json` and `benchmark.json` are the saved `--json` output of their command, run from
+the repo root. Nothing in this folder is edited by hand, and [README.md](../README.md) is
+rebuilt from it by [tools/build_readme.py](../tools/build_readme.py). A test fails if the two
+disagree.
 
 Three file names differ from the subcommand that writes them: `seedcheck` writes
 `clock_seed_check`, `qc` writes `qc_clock_trial`, and `realcheck` writes `real_check`.
@@ -16,6 +18,8 @@ Three file names differ from the subcommand that writes them: `seedcheck` writes
 | [shortcut.md](shortcut.md), [.json](shortcut.json) | `longevity-rl shortcut --out results` | several minutes | Can a policy that memorises beat the reference? |
 | [real_check.md](real_check.md), [.json](real_check.json) | `longevity-rl realcheck --out results` | under a minute | How far is the simulator from real clock readouts? |
 | [qc_clock_trial_calibrated.md](qc_clock_trial_calibrated.md), [.json](qc_clock_trial_calibrated.json) | `longevity-rl qc --noise calibrated --out results` | several minutes | How far is the simulator from real clock readouts? |
+| [replay.json](replay.json) | `longevity-rl replay --seed 0 --campaigns 100 --json > results/replay.json` | seconds | Few-shot batch selection |
+| [benchmark.json](benchmark.json) | `longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0 --json > results/benchmark.json` | seconds | Aging-clock benchmark |
 
 The `.json` twin of a table holds the same result in full, and the README builder reads the
 `.json` where one exists. `qc` uses 2,000 seeds unless `--seeds` says otherwise, and the two QC

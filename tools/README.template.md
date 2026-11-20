@@ -39,6 +39,8 @@ The first command shows cumulative hits by round for random selection, a fixed
 ranking, an updated greedy ranking, batch Thompson sampling, and the planner.
 The second reports paired results across seeds. Add `--json` to either command.
 
+<<d:replay_results>>
+
 ## Aging-clock benchmark
 
 `longevity-rl benchmark` compares ways to interpret the same simulated trial. Every
@@ -55,12 +57,14 @@ longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0
 longevity-rl benchmark --noise calibrated --json
 ```
 
+<<d:benchmark_results>>
+
 ## Where things are
 
 | I want to | Look here |
 |---|---|
-| compare batch-selection policies on the same synthetic pool | `longevity-rl replay --seed 17`, [replay.py](src/longevityrl/replay.py) |
-| compare ways to interpret the same simulated clock trial | `longevity-rl benchmark`, [benchmark.py](src/longevityrl/benchmark.py) |
+| compare batch-selection policies on the same synthetic pool | `longevity-rl replay --seed 17`, [replay.py](src/longevityrl/replay.py), [results/replay.json](results/replay.json) |
+| compare ways to interpret the same simulated clock trial | `longevity-rl benchmark`, [benchmark.py](src/longevityrl/benchmark.py), [results/benchmark.json](results/benchmark.json) |
 | see the task as an agent sees it, or run one episode | `longevity-rl spec`, `longevity-rl play --seed 3`, [env.py](src/longevityrl/env.py) |
 | read how the simulated people and their omics are made | [biology.py](src/longevityrl/biology.py) |
 | read how the clocks are fitted and what each one reads | [clocks.py](src/longevityrl/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |

@@ -39,6 +39,23 @@ The first command shows cumulative hits by round for random selection, a fixed
 ranking, an updated greedy ranking, batch Thompson sampling, and the planner.
 The second reports paired results across seeds. Add `--json` to either command.
 
+**First results** ([results/replay.json](results/replay.json)): 100 campaigns on seeds 0 to 99,
+96 new candidates per policy per campaign.
+
+| Policy | Mean joint hits |
+|---|---|
+| greedy (updated greedy ranking) | 42.05 |
+| planner (two-round lookahead) | 41.42 |
+| fixed (fixed ranking) | 37.72 |
+| active (batch Thompson sampling) | 37.00 |
+| random (random selection) | 26.95 |
+
+So far the answer is no: the planner does not find more joint hits than the greedy baseline, and
+the 2 are not distinguishable in these campaigns. The planner averages 41.42 joint hits per
+campaign and the greedy ranking 42.05. Against greedy the planner wins 26 campaigns, ties 40 and
+loses 34; on the 60 campaigns that differ, an exact two-sided sign test gives p = 0.37. Against
+batch Thompson sampling it wins 66, ties 2 and loses 32 (p = 0.0008).
+
 ## Aging-clock benchmark
 
 `longevity-rl benchmark` compares ways to interpret the same simulated trial. Every
@@ -55,12 +72,28 @@ longevity-rl benchmark --train-seeds 32 --test-seeds 16 --seed 0
 longevity-rl benchmark --noise calibrated --json
 ```
 
+**First results** ([results/benchmark.json](results/benchmark.json)): the outcome model was
+fitted on seeds 0 to 31, and every policy was tested on seeds 32 to 47, with the default noise
+profile.
+
+| Policy | Mean reward | Right calls | Mean absolute error (years) | Reward minus reference (paired) |
+|---|---|---|---|---|
+| reference (scripted reference) | 0.890 | 15 of 16 | 0.090 |  |
+| model_based (model-based policy) | 0.763 | 14 of 16 | 0.315 | -0.127 (SE 0.048) |
+| average_all_clocks (all-clock average) | 0.730 | 14 of 16 | 0.685 | -0.160 (SE 0.057) |
+| always_no (constant negative call) | 0.374 | 6 of 16 | 0.942 | -0.516 (SE 0.114) |
+
+The model-based policy does not beat the scripted reference. Its mean reward is lower, 0.763
+against 0.890, but the paired difference of -0.127 (SE 0.048) over 16 test trials is 2.7
+standard errors, under the bar of 3 that the QC card below uses to say one policy scores lower
+than another.
+
 ## Where things are
 
 | I want to | Look here |
 |---|---|
-| compare batch-selection policies on the same synthetic pool | `longevity-rl replay --seed 17`, [replay.py](src/longevityrl/replay.py) |
-| compare ways to interpret the same simulated clock trial | `longevity-rl benchmark`, [benchmark.py](src/longevityrl/benchmark.py) |
+| compare batch-selection policies on the same synthetic pool | `longevity-rl replay --seed 17`, [replay.py](src/longevityrl/replay.py), [results/replay.json](results/replay.json) |
+| compare ways to interpret the same simulated clock trial | `longevity-rl benchmark`, [benchmark.py](src/longevityrl/benchmark.py), [results/benchmark.json](results/benchmark.json) |
 | see the task as an agent sees it, or run one episode | `longevity-rl spec`, `longevity-rl play --seed 3`, [env.py](src/longevityrl/env.py) |
 | read how the simulated people and their omics are made | [biology.py](src/longevityrl/biology.py) |
 | read how the clocks are fitted and what each one reads | [clocks.py](src/longevityrl/clocks.py), [results/clocks.md](results/clocks.md), [results/clock_seed_check.md](results/clock_seed_check.md) |

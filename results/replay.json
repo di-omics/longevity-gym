@@ -1,0 +1,1 @@
+{"source": "synthetic", "first_seed": 0, "campaigns": 100, "rounds": 4, "batch_size": 24, "warm_start": 8, "mean_hits": {"random": 26.95, "fixed": 37.72, "active": 37.0, "planner": 41.42, "greedy": 42.05}, "planner_comparisons": {"greedy": {"wins": 26, "ties": 40, "losses": 34, "mean_difference": -0.63}, "active": {"wins": 66, "ties": 2, "losses": 32, "mean_difference": 4.42}}}
